@@ -1,0 +1,13 @@
+npy_path:../3descriptor/Osc-fp.npy
+res_folder:res/Osc-maccs
+if_rdkit:1
+if_soap:0
+if_acsf:0
+if_mordred:0
+if_maccs:0
+if_morgan:0
+if_QC:0
+if_m:0
+if_extra:0
+n_splits:5
+seed:5

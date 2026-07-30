@@ -1,0 +1,13 @@
+npy_path:../3descriptor/pe-bh-qc-fp-1.npy
+res_folder:res-1/pe-bh-QC-2
+if_rdkit:0
+if_soap:0
+if_acsf:0
+if_mordred:0
+if_maccs:0
+if_morgan:0
+if_QC:0
+if_m:0
+if_extra:1
+n_splits:5
+seed:5

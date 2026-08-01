@@ -1,113 +1,104 @@
 #!/usr/bin/env python3
-# ml-m-predict-final.py  —— 必须加载 y_scaler.pkl 的外推脚本
-# ========= 配置区（全部可改） =========
-PREDICT_NPY     = 'hjf-add-fp.npy'      # 待外推 npy
-OUTPUT_CSV      = 'wavelength-add-pred.csv'  # 输出 csv
-MODEL_PATH      = 'wavelength-GradientBoosting.joblib'  # 模型
-COLS_PATH       = 'wavelength-training_columns.pkl'  # 列顺序
-Y_SCALER_PATH   = 'wavelength-y_scaler.pkl'  # 必须存在！
-CONFIG_TXT      = 'config-full-rdkit.txt'     # 训练配置（只拿特征开关）
-# =====================================
+# usemodel.py  —— 用已训练模型对新数据做推理
+# =============================================================================
+# ============================= 配置区域（只改这里）============================
+# =============================================================================
 
+PREDICT_NPY   = 'hjf-add-fp.npy'                      # 待预测 npy
+OUTPUT_CSV    = 'wavelength-add-pred.csv'              # 输出 CSV
+MODEL_DIR     = '../4machineLearing/results/seed_42'   # 训练输出目录（含 models/ 等子目录）
+MODEL_NAME    = 'GradientBoosting'                     # 模型名（不含 .joblib）
+CONFIG_TXT    = '../4machineLearing/config-full-1.txt' # 与训练时相同的配置文件
+
+# 降维设置（与训练时保持一致）
+# 若训练时启用了降维，此处自动检测 MODEL_DIR/dim_reducer.pkl 并应用
+# 设为 False 可强制跳过（通常无需修改）
+USE_DIM_REDUCTION = True
+
+# =============================================================================
+# ============================= 以下代码勿动 ==================================
+# =============================================================================
+
+import os
+import sys
 import numpy as np
 import pandas as pd
-import joblib, os, sys
+import joblib
 
-# ---------------- 内嵌：解析特征开关 ----------------
-def parse_list(key, default='0'):
-    val = config_dict.get(key, default)
-    return int(val.split(',')[0])   # 单文件场景
+# ── 公共工具（训练目录）────────────────────────────────────────────────────────
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ML_DIR = os.path.normpath(os.path.join(_HERE, '..', '4machineLearing'))
+sys.path.insert(0, _ML_DIR)
+from feature_utils import (load_npy, extract_features, clean_features,
+                            load_config, parse_flags, resolve_path, DimReducer)
 
-# ---------------- 内嵌：数据清洗 ----------------
-def clean_features(feat: np.ndarray) -> np.ndarray:
-    if feat.size == 0:
-        raise RuntimeError('[ERROR] 特征矩阵为 0 列！')
-    X = feat.copy()
-    X = np.clip(X, -1e30, 1e30)
-    X[~np.isfinite(X)] = np.nan
-    col_means = np.nanmean(X, axis=0)
-    col_means[np.isnan(col_means)] = 0
-    nan_mask = np.isnan(X)
-    X[nan_mask] = np.take(col_means, np.where(nan_mask)[1])
-    return X
+# ── 路径解析 ───────────────────────────────────────────────────────────────────
+_model_dir   = resolve_path(MODEL_DIR,   _HERE)
+_config_path = resolve_path(CONFIG_TXT,  _HERE)
+_npy_path    = resolve_path(PREDICT_NPY, _HERE)
 
-# ---------------- 1. 读训练配置 ----------------
-config_dict = {}
-with open(CONFIG_TXT, 'r', encoding='utf-8') as f:
-    for line in f:
-        line = line.strip()
-        if line and not line.startswith('#'):
-            k, v = line.split(':', 1)
-            config_dict[k.strip()] = v.strip()
+model_path    = os.path.join(_model_dir, 'models',  f'{MODEL_NAME}.joblib')
+cols_path     = os.path.join(_model_dir, 'training_columns.pkl')
+scaler_path   = os.path.join(_model_dir, 'y_scaler.pkl')
+reducer_path  = os.path.join(_model_dir, 'dim_reducer.pkl')
 
-# ---------------- 2. 加载外部资源 ----------------
-if not os.path.exists(Y_SCALER_PATH):
-    raise FileNotFoundError(
-        f'[{Y_SCALER_PATH}] 不存在！请先在训练脚本里补存 '
-        'joblib.dump(y_scaler, os.path.join(out_dir, "y_scaler.pkl"))'
-    )
+# ── 加载推理资源 ───────────────────────────────────────────────────────────────
+for path, label in [(model_path,  'model'),
+                    (cols_path,   'training_columns'),
+                    (scaler_path, 'y_scaler')]:
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"[usemodel] {label} 文件不存在: {path}\n"
+            "请检查 MODEL_DIR / MODEL_NAME 配置，或确认训练脚本已正常运行并保存了所有文件。"
+        )
 
-pipe       = joblib.load(MODEL_PATH)
-train_cols = joblib.load(COLS_PATH)
-y_scaler   = joblib.load(Y_SCALER_PATH)
-print(f'[INFO] 期望特征维度：{len(train_cols)}')
+pipe        = joblib.load(model_path)
+train_cols  = joblib.load(cols_path)
+y_scaler    = joblib.load(scaler_path)
+print(f"[INFO] 模型: {MODEL_NAME}   期望特征维度: {len(train_cols)}")
 
-# ---------------- 3. 加载待预测 npy ----------------
-raw = np.load(PREDICT_NPY, allow_pickle=True)
-if raw.ndim == 0:
-    raw = raw.item()
-if isinstance(raw, dict) and 'successful' in raw:
-    data = raw['successful']
-elif isinstance(raw, np.ndarray) and raw.dtype == object:
-    data = raw
-else:
-    raise ValueError(f'{PREDICT_NPY} 格式无法识别')
+# ── 加载降维器（若存在）───────────────────────────────────────────────────────
+dim_reducer = None
+if USE_DIM_REDUCTION and os.path.isfile(reducer_path):
+    dim_reducer = DimReducer.load(reducer_path)
+    print(f"[INFO] 已加载降维器: method={dim_reducer.method}")
+elif USE_DIM_REDUCTION:
+    print(f"[INFO] 未检测到降维器文件（{reducer_path}），跳过降维")
 
-# ---------------- 4. 特征拼接 ----------------
-if_rdkit   = parse_list('if_rdkit',   '0')
-if_soap    = parse_list('if_soap',    '0')
-if_acsf    = parse_list('if_acsf',    '0')
-if_mordred = parse_list('if_mordred', '0')
-if_maccs   = parse_list('if_maccs',   '0')
-if_morgan  = parse_list('if_morgan',  '0')
-if_QC      = parse_list('if_QC',      '0')
-if_m       = parse_list('if_m',       '0')
-if_extra   = parse_list('if_extra',   '0')
+# ── 读取配置 & 特征提取 ────────────────────────────────────────────────────────
+config = load_config(_config_path)
 
-xs, ys, names = [], [], []
-for idx, d in enumerate(data):
-    ft = []
-    if if_rdkit:   ft += d.get('rdkit_descriptor', [])
-    if if_soap:    ft += d.get('soap_descriptor', [])
-    if if_acsf:    ft += d.get('acsf_descriptor', [])
-    if if_mordred: ft += d.get('mordred_descriptor', [])
-    if if_maccs:   ft += d.get('maccs_descriptor', [])
-    if if_morgan:  ft += d.get('morgan_descriptor', [])
-    if if_QC:      ft += d.get('g_d', [])
-    if if_extra:   ft += d.get('extra_d', [])
-    if if_m:
-        for l in d.get('3DMatrix', []):
-            ft += l
-    xs.append(ft)
-    ys.append(d.get('y', np.nan))
-    names.append(d.get('name', f'sample_{idx}'))
+# 预测场景只有单个 npy，固定 n_files=1
+# 特征开关取 config 中每个 flag 的第一个值（与训练时该文件对应的开关一致）
+flags_single = parse_flags(config, n_files=1)
 
-X = np.array(xs, dtype=np.float64)
-y = np.array(ys, dtype=np.float64)
+data  = load_npy(_npy_path)
+names = [d.get('name', f'sample_{i}') for i, d in enumerate(data)]
+ys    = np.array([d.get('y', np.nan) for d in data], dtype=np.float64)
 
-# ---------------- 5. 数据清洗 + 对齐列 ----------------
-X_clean = clean_features(X)
-X_df    = pd.DataFrame(X_clean, columns=train_cols)
+features_raw, _ = extract_features([data], flags_single)
+features        = clean_features(features_raw)
 
-# ---------------- 6. 预测 + 逆标准化 ----------------
-y_pred = pipe.predict(X_df)
-y_pred = y_scaler.inverse_transform(y_pred.reshape(-1, 1)).flatten()
+# ── 降维（若训练时启用）─────────────────────────────────────────────────────────
+if dim_reducer is not None:
+    print(f"[INFO] 应用降维变换: {features.shape[1]} → ", end='')
+    features = dim_reducer.transform(features)
+    print(f"{features.shape[1]} 维")
 
-# ---------------- 7. 写 csv ----------------
+# ── 列对齐（用 training_columns 确保特征顺序与训练一致）─────────────────────
+X_df = pd.DataFrame(features, columns=train_cols)
+print(f"[INFO] 预测样本数: {len(X_df)}")
+
+# ── 预测 & 逆标准化 ────────────────────────────────────────────────────────────
+y_pred_scaled = pipe.predict(X_df)
+y_pred        = y_scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
+
+# ── 输出 CSV ───────────────────────────────────────────────────────────────────
+out_path = resolve_path(OUTPUT_CSV, _HERE)
 pd.DataFrame({
-    'sample_name': names,
-    'y': y,
-    'prediction_y': y_pred
-}).to_csv(OUTPUT_CSV, index=False, float_format='%.6f')
+    'sample_name':  names,
+    'y_true':       ys,
+    'y_pred':       y_pred,
+}).to_csv(out_path, index=False, float_format='%.6f')
 
-print(f'[INFO] 外推完成，结果已写入 {OUTPUT_CSV}')
+print(f"[INFO] 推理完成，结果已写入 {out_path}")

@@ -65,20 +65,114 @@ SPLIT_N_BINS        = 5           # 分层时的 y 分位数分箱数
 ### 输出目录结构
 
 ```
-results/
+outputs/training/          ← 推荐路径（通过 molearn.yaml 配置）
 └── seed_42/
     ├── models/
-    │   ├── RandomForest.joblib
-    │   └── RandomForest_params.txt   # 模型参数 + 训练指标
+    │   ├── RandomForest.joblib            ← 训练好的模型
+    │   └── RandomForest_model_card.txt    ← 模型信息卡（见下节）
     ├── images/
-    │   └── RandomForest.png          # 预测 vs 真实散点图
+    │   └── RandomForest.png               ← 预测 vs 真实散点图
     ├── shap/
     │   ├── RandomForest_summary.png
     │   └── RandomForest_bar.png
-    ├── training_columns.pkl          # 训练特征列名
-    ├── y_scaler.pkl                  # 标签 StandardScaler
-    └── dim_reducer.pkl               # 降维器（若启用降维）
+    ├── training_columns.pkl               ← 训练特征列名
+    ├── y_scaler.pkl                       ← 标签 StandardScaler
+    └── dim_reducer.pkl                    ← 降维器（若启用降维）
 ```
+
+> **变更说明**：`RandomForest_params.txt`（旧版）已升级为 `RandomForest_model_card.txt`（新版），内容大幅扩充，包含完整的数据集信息、引用文献等。
+
+### 模型信息卡 (`{ModelName}_model_card.txt`)
+
+每个模型训练完成后，在 `models/` 目录下自动生成一份完整的信息卡文件，内容格式如下：
+
+```
+======================================================================
+  MOLEARN MODEL CARD
+======================================================================
+  Generated : 2025-01-01 12:00:00
+  Model     : RandomForest
+  Seed      : 42
+
+── 1. 数据集信息 (Dataset) ─────────────────────────────────────────
+  npy_path    : data/descriptors/dataset_fp.npy
+  train_shape : 800 samples × 2048 features
+  test_shape  : 200 samples × 2048 features
+  split_method: random
+
+── 2. 特征配置 (Feature Flags) ────────────────────────────────────
+  [ON]  if_rdkit     : RDKit 2D Descriptors (200 维)
+  [ON]  if_morgan    : Morgan Fingerprints (ECFP)
+  [off] if_soap      : SOAP descriptors
+  ...
+
+── 3. 降维配置 (Dimensionality Reduction) ──────────────────────────
+  method      : none (降维已禁用)
+
+── 4. 模型信息 (Model) ─────────────────────────────────────────────
+  model_name  : RandomForest
+  description : Random Forest Regressor (Breiman, 2001)
+  class       : RandomForestRegressor
+  module      : sklearn.ensemble._forest
+  scaler      : StandardScaler (特征标准化)
+
+── 5. 超参数 (Hyperparameters) ─────────────────────────────────────
+  max_depth                     : None
+  n_estimators                  : 300
+  ...
+
+── 6. 超参数优化 (HPO) ─────────────────────────────────────────────
+  HPO 未启用（使用手动设置的超参数）
+
+── 7. 测试集评估指标 (Test Set Metrics) ────────────────────────────
+  MAE     : 0.123456
+  MSE     : 0.031415
+  R2      : 0.956789
+  train_time  : 12.34 s
+
+── 8. 引用文献 (References) ────────────────────────────────────────
+  [1] scikit-learn (主要框架)
+      Pedregosa et al. (2011). JMLR 12, pp. 2825-2830.
+  [2] RandomForest 算法
+      Breiman, L. (2001). Random Forests. Machine Learning 45(1), 5-32.
+  [3] RDKit 2D Descriptors
+      RDKit: Open-source cheminformatics. http://www.rdkit.org
+  ...
+```
+
+**8 个章节说明：**
+
+| 章节 | 内容 |
+|------|------|
+| 1. Dataset | npy 路径、训练/测试样本量和特征维度、划分方法、配置文件路径 |
+| 2. Feature Flags | 14 种描述符的 `[ON]`/`[off]` 状态 |
+| 3. Dim Reduction | 降维方法及所有参数（method=none 时显示"已禁用"） |
+| 4. Model Info | 模型名、算法说明、Python 类名及模块、Scaler 类型 |
+| 5. Hyperparameters | Pipeline 中模型的全部超参数（sorted 字母序） |
+| 6. HPO Best Params | 超参数优化最优结果（HPO 未启用时说明） |
+| 7. Test Set Metrics | MAE / MSE / R²、本次训练耗时（秒） |
+| 8. References | 自动生成：scikit-learn + 模型算法 + 所有**已启用**描述符的学术引用 |
+
+**涵盖的 16 种模型引用：**
+
+| 模型 | 引用来源 |
+|------|----------|
+| LinearRegression | scikit-learn OLS |
+| Ridge | Hoerl & Kennard (1970) |
+| LassoCV | Tibshirani (1996) |
+| ElasticNetCV | Zou & Hastie (2005) |
+| HuberRegressor | Huber (1964) |
+| BayesianRidge | MacKay (1992) |
+| DecisionTree | Breiman et al. (1984) CART |
+| RandomForest | Breiman (2001) |
+| ExtraTreesRegressor | Geurts et al. (2006) |
+| GradientBoosting | Friedman (2001) |
+| HistGBR | Chen & Guestrin (2016) XGBoost 思想 |
+| AdaBoost | Freund & Schapire (1997) |
+| BaggingRegressor | Breiman (1996) Bagging |
+| SVR | Vapnik (1995) SVM |
+| KNeighbors | Cover & Hart (1967) |
+| MLP | Rumelhart et al. (1986) Backprop |
 
 ---
 
@@ -195,17 +289,28 @@ ABLATION_OUT_DIR = 'ablation_results'
 
 ## config-full-*.txt 格式
 
+单独运行 `ml-m-full.py` 时使用本地 `config-full-*.txt`；通过 `molearn_run.py` 运行时由总控脚本自动生成临时配置并通过 `MOLEARN_CONFIG` 环境变量传入。
+
 ```
-npy_path: poly-all-fp.npy          # 逗号分隔，支持多文件
-res_folder: results
-seed: 42,123                       # 多 seed 批量训练
-if_rdkit:  1
-if_maccs:  1
-if_morgan: 0
-if_soap:   0
-if_acsf:   0
-if_mordred: 0
-if_QC:     0
-if_extra:  0
-if_m:      0
+npy_path:    data/descriptors/dataset_fp.npy   # 逗号分隔，支持多文件
+res_folder:  outputs/training                  # 结果输出目录
+seed:        42,123                            # 多 seed 批量训练
+
+# 描述符开关（14 种）
+if_rdkit:    1    # RDKit 2D 描述符
+if_maccs:    1    # MACCS Keys
+if_morgan:   1    # Morgan / ECFP 指纹
+if_atompair: 0    # AtomPair 指纹（新增）
+if_torsion:  0    # TopologicalTorsion 指纹（新增）
+if_avalon:   0    # Avalon 指纹（新增）
+if_soap:     0    # SOAP 描述符
+if_acsf:     0    # ACSF 描述符
+if_mbtr:     0    # MBTR 描述符（新增）
+if_mordred:  0    # Mordred 分子描述符
+if_prop:     0    # 基础分子性质（新增）
+if_QC:       0    # 量化化学描述符
+if_extra:    0    # 用户自定义描述符
+if_m:        0    # 3D 矩阵描述符
 ```
+
+> **提示**：通过 `molearn.yaml` 的 `step6_train.features` 节统一管理这些开关，无需手动编辑此文件。

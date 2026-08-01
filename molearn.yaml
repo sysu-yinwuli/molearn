@@ -1,0 +1,253 @@
+# =============================================================================
+#  molearn.yaml  —  全项目统一配置文件
+#  用途：由总控脚本 molearn_run.py 读取，一次性配置整个流水线。
+#        各子脚本仍可单独运行，使用各自目录中的配置文件。
+#  修改方法：只需修改此文件，无需分别修改各子脚本的配置。
+# =============================================================================
+
+# ── 项目基本信息 ────────────────────────────────────────────────────────────────
+project:
+  name:        "my_molearn_project"      # 项目名称（用于输出目录命名）
+  description: "分子机器学习项目"          # 项目描述（写入 model_card.txt）
+  author:      ""                         # 作者姓名（写入 model_card.txt）
+  version:     "1.0"                      # 版本号
+
+# ── 统一数据目录结构 ─────────────────────────────────────────────────────────────
+# 推荐目录布局：
+#   data/
+#     raw/          ← 原始 .gjf / .xyz 文件（1dataProcess 输入）
+#       gjf/
+#       xyz/
+#     processed/    ← create_npy 生成的 .npy（1dataProcess 输出）
+#     descriptors/  ← create_by_fp 生成的带描述符 .npy（3descriptor 输出）
+#     samples/      ← sample_npy 生成的子数据集（1dataProcess/sample_npy 输出）
+#     splits/       ← dataset_split 生成的划分数据集（4machineLearing 输出）
+#   outputs/
+#     training/     ← ml-m-full 训练结果（models/images/shap/results）
+#     analysis/     ← db_analysis 分析结果
+#     sa_scores/    ← sa_score 可合成性打分结果
+#     similarity/   ← similarity_search 相似度搜索结果
+#     predictions/  ← usemodel 推理结果
+paths:
+  data_root:          "data"                      # 统一数据根目录
+  raw_gjf:            "data/raw/gjf"              # 原始 .gjf 文件目录
+  raw_xyz:            "data/raw/xyz"              # .xyz 文件目录（gjf2xyz 输出）
+  processed_npy:      "data/processed"            # create_npy 输出目录
+  descriptor_npy:     "data/descriptors"          # create_by_fp 输出目录
+  samples_dir:        "data/samples"              # sample_npy 输出目录
+  splits_dir:         "data/splits"               # dataset_split 输出目录
+  training_output:    "outputs/training"          # 训练输出根目录
+  analysis_output:    "outputs/analysis"          # 数据库分析输出目录
+  sa_score_output:    "outputs/sa_scores"         # 可合成性打分输出目录
+  similarity_output:  "outputs/similarity"        # 相似度搜索输出目录
+  prediction_output:  "outputs/predictions"       # 模型推理输出目录
+
+# ── Step 1: 数据预处理 (1dataProcess) ──────────────────────────────────────────
+step1_data:
+  enabled:     true
+  xlsx_config: "data/raw/creat_npy.xlsx"        # create_npy.py 配置表
+  label_xlsx:  "data/raw/project-1.xlsx"        # 标签 Excel（分子名 + y 值）
+  key_col:     0                                 # 分子名列索引（0-based）
+  y_col:       3                                 # y 值列索引
+  flag_col:    5                                 # 使用标志列索引（0=跳过）
+  output_name: "dataset.npy"                    # 输出 npy 文件名（保存到 paths.processed_npy）
+
+# ── Step 2: 数据库分析 (2databaseAnalysis/db_analysis.py) ──────────────────────
+step2_analysis:
+  enabled:          false
+  input_npy:        ""                           # 留空则自动用 step3 输出的描述符 npy
+  run_y_dist:       true                         # Y 属性分布（直方图/CDF/QQ/箱线/小提琴）
+  run_correlation:  true                         # 描述符相关性热图
+  run_dim_scatter:  true                         # PCA/t-SNE/UMAP 散点图
+  run_func_group:   true                         # 官能团分析（25+ SMARTS）
+  run_diversity:    true                         # Tanimoto 多样性分布
+  run_morgan_bits:  true                         # Morgan 位频率分析
+  y_label:          "Property"                   # Y 轴标签
+  dim_feature:      "morgan_descriptor"          # 用于降维散点图的描述符字段
+  diversity_fp:     "morgan"                     # 多样性指纹类型
+  diversity_sample: 500                          # 多样性分析采样数
+
+# ── Step 3: 描述符计算 (3descriptor/create_by_fp.py) ────────────────────────────
+step3_descriptor:
+  enabled:     true
+  input_npy:   ""                               # 留空则自动用 step1 输出
+  output_name: "dataset-fp.npy"                # 输出文件名（保存到 paths.descriptor_npy）
+  global_species: ["H", "C", "N", "O", "F", "S", "Cl"]
+
+  # 描述符开关（true=计算，false=跳过）
+  calc_rdkit:    true
+  calc_maccs:    true
+  calc_morgan:   true
+  calc_atompair: false
+  calc_torsion:  false
+  calc_avalon:   false
+  calc_soap:     false
+  calc_acsf:     false
+  calc_mbtr:     false
+  calc_mordred:  false
+  calc_prop:     true
+
+  # Morgan 参数
+  morgan_radius:       2
+  morgan_nbits:        2048
+  morgan_use_features: false    # false=ECFP，true=FCFP
+  morgan_use_counts:   false    # false=位向量，true=计数向量
+
+  # 其他指纹位数
+  rdkit_fp_size:   2048
+  atompair_nbits:  2048
+  torsion_nbits:   2048
+  avalon_nbits:    2048
+
+  # SOAP 参数
+  soap_r_cut:    5.0
+  soap_n_max:    8
+  soap_l_max:    6
+  soap_sigma:    0.5
+  soap_rbf:      "gto"
+
+  # ACSF 参数
+  acsf_r_cut:    6.0
+
+  # MBTR 参数
+  mbtr_n_grid:   100
+  mbtr_sigma:    0.01
+
+  # Mordred 参数
+  mordred_ignore_3d: true
+
+# ── Step 4: 数据抽样 (1dataProcess/sample_npy.py) ──────────────────────────────
+step4_sampling:
+  enabled:      false
+  input_npy:    ""                             # 留空则自动用 step3 输出
+  sample_size:  100
+  seeds:        [42, 123, 456]
+  run_random:     true
+  run_systematic: true
+  run_stratified: true
+  run_lhs:        true
+  run_diversity:  true
+  stratified_bins: 5
+  lhs_feature:    "morgan_descriptor"
+  lhs_pca_dims:   5
+  div_fp_field:   "morgan_descriptor"
+
+# ── Step 5: 数据集划分 (4machineLearing/dataset_split.py) ──────────────────────
+step5_split:
+  enabled:       false
+  input_npy:     ""                            # 留空则自动用 step3 输出
+  method:        "random"                      # random | stratified | scaffold
+  train_ratio:   0.8
+  valid_ratio:   0.1
+  test_ratio:    0.1
+  n_bins:        5                             # stratified 时的分箱数
+  scaffold_type: "bemis_murcko"               # bemis_murcko|murcko_generic|morgan|maccs|rdkit
+  seed:          42
+
+# ── Step 6: 模型训练 (4machineLearing/ml-m-full.py) ────────────────────────────
+step6_train:
+  enabled:     true
+  input_npy:   ""                              # 留空则自动用 step3 输出
+  seeds:       [42]                            # 随机种子列表（每个种子训练一次）
+  split_method: "random"                       # random | stratified
+  split_n_bins:  5                             # stratified 时的分箱数
+
+  # 模型开关（false=跳过该模型）
+  models:
+    LinearRegression:    true
+    Ridge:               true
+    LassoCV:             true
+    ElasticNetCV:        true
+    HuberRegressor:      true
+    BayesianRidge:       true
+    DecisionTree:        true
+    RandomForest:        true
+    ExtraTreesRegressor: true
+    GradientBoosting:    true
+    HistGBR:             true
+    AdaBoost:            true
+    BaggingRegressor:    true
+    SVR:                 true
+    KNeighbors:          true
+    MLP:                 true
+
+  # 特征开关（与 3descriptor 描述符类型对应）
+  features:
+    if_rdkit:    1
+    if_maccs:    0
+    if_morgan:   1
+    if_atompair: 0
+    if_torsion:  0
+    if_avalon:   0
+    if_soap:     0
+    if_acsf:     0
+    if_mbtr:     0
+    if_mordred:  0
+    if_prop:     1
+    if_QC:       0
+    if_extra:    0
+    if_m:        0
+
+  # 超参数优化
+  hpo_enable:  false
+  hpo_method:  "optuna"                       # grid | random | optuna
+  hpo_cv:      5
+  hpo_n_iter:  30
+  hpo_scoring: "r2"
+  hpo_models:  ["RandomForest", "GradientBoosting", "SVR"]
+
+  # SHAP 分析
+  shap_enable:  true
+  shap_samples: 1000
+
+  # 降维（可选）
+  dim_reduction:
+    method:     "none"                         # none|pca|kpca|tsvd|umap|autoencoder
+    n_components: 50
+    variance_ratio: null                       # PCA 自动选维数（如 0.95），null=不使用
+    kpca_kernel: "rbf"
+    umap_n_neighbors: 15
+    umap_min_dist: 0.1
+
+# ── Step 7: 可合成性打分 (2databaseAnalysis/sa_score.py) ───────────────────────
+step7_sa_score:
+  enabled:         false
+  input_npy:       ""                          # 留空则自动用 step3 输出
+  calc_sa_score:   true
+  calc_scscore:    true
+  calc_syba:       false
+  calc_rascore:    false
+  calc_simple:     true
+  weights:
+    sa_score:      0.4
+    scscore:       0.3
+    syba:          0.0
+    rascore:       0.0
+    simple_score:  0.3
+
+# ── Step 8: 相似度搜索 (2databaseAnalysis/similarity_search.py) ─────────────────
+step8_similarity:
+  enabled:         false
+  query_npy:       ""                          # 查询分子 npy（必须手动指定）
+  database_npy:    ""                          # 数据库 npy（留空=step3 输出）
+  fp_type:         "morgan"                    # morgan|maccs|rdkit|atompair|torsion
+  morgan_radius:   2
+  morgan_nbits:    2048
+  sim_threshold:   0.7
+  top_n:           10
+  save_full_matrix: false
+
+# ── Step 9: 模型推理 (5modelApplication/usemodel.py) ────────────────────────────
+step9_predict:
+  enabled:      false
+  predict_npy:  ""                             # 待预测 npy（必须手动指定）
+  output_csv:   ""                             # 留空则自动命名
+  model_dir:    ""                             # 留空则自动用 step6 最新训练输出
+  model_name:   "GradientBoosting"            # 选用哪个模型
+  use_dim_reduction: true
+
+# ── 系统资源控制（batch_train.py 使用，单独训练时也生效）──────────────────────────
+resources:
+  priority:      "normal"                      # low | normal | high
+  cpu_cores:     -1                            # -1=全部核心，N=限定核心数
+  mem_limit_gb:  0                             # 0=不限制，N=限制内存上限(GB，仅Linux)

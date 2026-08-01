@@ -298,16 +298,285 @@ def _build_models():
         models[name] = pipe
     return models
 
-# ── 模型参数导出 ───────────────────────────────────────────────────────────────
+# ── 模型信息卡（Model Card）生成 ──────────────────────────────────────────────
+# 每个模型训练完成后，自动在同一目录写入一份完整的 model_card.txt
+# 记录：数据集、特征配置、模型参数、训练指标、降维配置、引用文献
+# ─────────────────────────────────────────────────────────────────────────────
+_MODEL_CITATIONS = {
+    "LinearRegression": (
+        "Linear Regression",
+        "Pedregosa et al. Scikit-learn: Machine Learning in Python. "
+        "JMLR 12, pp. 2825-2830, 2011. https://scikit-learn.org"
+    ),
+    "Ridge": (
+        "Ridge Regression (L2 regularization)",
+        "Hoerl & Kennard (1970). Ridge Regression: Biased Estimation for Nonorthogonal Problems. "
+        "Technometrics 12(1):55-67. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "LassoCV": (
+        "LASSO Regression with cross-validated alpha (L1 regularization)",
+        "Tibshirani R (1996). Regression Shrinkage and Selection via the Lasso. "
+        "J. Royal Stat. Soc. B 58(1):267-288. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "ElasticNetCV": (
+        "Elastic Net with cross-validated alpha/l1_ratio (L1+L2 regularization)",
+        "Zou & Hastie (2005). Regularization and Variable Selection via the Elastic Net. "
+        "J. Royal Stat. Soc. B 67(2):301-320. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "HuberRegressor": (
+        "Huber Regression (robust to outliers)",
+        "Huber PJ (1964). Robust Estimation of a Location Parameter. "
+        "Ann. Math. Statist. 35(1):73-101. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "BayesianRidge": (
+        "Bayesian Ridge Regression (automatic relevance determination)",
+        "Tipping ME (2001). Sparse Bayesian Learning and the Relevance Vector Machine. "
+        "JMLR 1:211-244. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "DecisionTree": (
+        "Decision Tree Regressor (CART)",
+        "Breiman et al. (1984). Classification and Regression Trees. Wadsworth & Brooks/Cole. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "RandomForest": (
+        "Random Forest Regressor (bagging of decision trees)",
+        "Breiman L (2001). Random Forests. Machine Learning 45:5-32. "
+        "DOI: 10.1023/A:1010933404324. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "ExtraTreesRegressor": (
+        "Extra Trees Regressor (extremely randomized trees)",
+        "Geurts et al. (2006). Extremely Randomized Trees. Machine Learning 63:3-42. "
+        "DOI: 10.1007/s10994-006-6226-1. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "GradientBoosting": (
+        "Gradient Boosting Regressor (GBRT)",
+        "Friedman JH (2001). Greedy Function Approximation: A Gradient Boosting Machine. "
+        "Ann. Statist. 29(5):1189-1232. DOI: 10.1214/aos/1013203451. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "HistGBR": (
+        "Histogram-based Gradient Boosting Regressor (LightGBM-style, large dataset optimized)",
+        "Ke et al. (2017). LightGBM: A Highly Efficient Gradient Boosting Decision Tree. "
+        "NeurIPS 30. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "AdaBoost": (
+        "AdaBoost Regressor (adaptive boosting)",
+        "Freund & Schapire (1997). A Decision-Theoretic Generalization of On-Line Learning "
+        "and an Application to Boosting. J. Comput. System Sci. 55(1):119-139. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "BaggingRegressor": (
+        "Bagging Regressor (bootstrap aggregating)",
+        "Breiman L (1996). Bagging Predictors. Machine Learning 24:123-140. "
+        "DOI: 10.1007/BF00058655. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "SVR": (
+        "Support Vector Regression (SVR with RBF kernel)",
+        "Vapnik VN (1995). The Nature of Statistical Learning Theory. Springer. "
+        "Smola & Schölkopf (2004). A Tutorial on Support Vector Regression. "
+        "Statistics and Computing 14:199-222. DOI: 10.1023/B:STCO.0000035301.49549.88. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "KNeighbors": (
+        "K-Nearest Neighbors Regressor",
+        "Cover & Hart (1967). Nearest Neighbor Pattern Classification. "
+        "IEEE Trans. Inf. Theory 13(1):21-27. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+    "MLP": (
+        "Multi-Layer Perceptron Regressor (feedforward neural network)",
+        "Rumelhart et al. (1986). Learning Representations by Back-Propagating Errors. "
+        "Nature 323:533-536. DOI: 10.1038/323533a0. "
+        "Pedregosa et al. JMLR 12, 2825-2830, 2011."
+    ),
+}
+
+_DESCRIPTOR_CITATIONS = {
+    'if_rdkit':    ("RDKit fingerprints & descriptors",
+                    "Landrum G. RDKit: Open-source cheminformatics. https://www.rdkit.org"),
+    'if_maccs':    ("MACCS structural keys (167-bit)",
+                    "MDL Information Systems (2002). MACCS Structural Keys. "
+                    "Symyx/MDL Drug Data Report."),
+    'if_morgan':   ("Morgan circular fingerprints (ECFP/FCFP)",
+                    "Rogers D & Hahn M (2010). Extended-Connectivity Fingerprints. "
+                    "J. Chem. Inf. Model. 50(5):742-754. DOI: 10.1021/ci100050t."),
+    'if_atompair': ("Atom-pair fingerprints",
+                    "Carhart et al. (1985). Atom Pairs as Molecular Features in Structure-Activity Studies. "
+                    "J. Chem. Inf. Comput. Sci. 25(2):64-73. DOI: 10.1021/ci00046a002."),
+    'if_torsion':  ("Topological torsion fingerprints",
+                    "Nilakantan et al. (1987). Topological Torsion: A New Molecular Descriptor for SAR Applications. "
+                    "J. Chem. Inf. Comput. Sci. 27(2):82-85. DOI: 10.1021/ci00054a008."),
+    'if_avalon':   ("Avalon fingerprints",
+                    "Gedeck et al. (2006). QSAR - How Good Is It in Practice? "
+                    "J. Chem. Inf. Model. 46(5):1924-1936. DOI: 10.1021/ci050413p."),
+    'if_soap':     ("SOAP (Smooth Overlap of Atomic Positions) descriptor",
+                    "Bartók et al. (2013). On Representing Chemical Environments. "
+                    "Phys. Rev. B 87, 184115. DOI: 10.1103/PhysRevB.87.184115. "
+                    "DScribe library: Himanen et al. (2020). Comput. Phys. Commun. 247, 106949."),
+    'if_acsf':     ("ACSF (Atom-Centered Symmetry Functions) descriptor",
+                    "Behler & Parrinello (2007). Generalized Neural-Network Representation of High-Dimensional "
+                    "Potential-Energy Surfaces. Phys. Rev. Lett. 98, 146401. DOI: 10.1103/PhysRevLett.98.146401. "
+                    "DScribe library: Himanen et al. (2020). Comput. Phys. Commun. 247, 106949."),
+    'if_mbtr':     ("MBTR (Many-Body Tensor Representation) descriptor",
+                    "Huo & Rupp (2018). Unified Representation of Molecules and Crystals for Machine Learning. "
+                    "arXiv:1704.06439. "
+                    "DScribe library: Himanen et al. (2020). Comput. Phys. Commun. 247, 106949."),
+    'if_mordred':  ("Mordred molecular descriptors",
+                    "Moriwaki et al. (2018). Mordred: a Molecular Descriptor Calculator. "
+                    "J. Cheminform. 10, 4. DOI: 10.1186/s13321-018-0258-y."),
+    'if_prop':     ("Basic molecular properties (RDKit)",
+                    "MolWt, HeavyAtomCount, HBA, HBD, LogP, TPSA, RotBonds, ArRings, NumRings, FractionCSP3, Heteroatoms. "
+                    "Lipinski et al. (1997). Experimental and Computational Approaches to Estimate Solubility and "
+                    "Permeability in Drug Discovery. Adv. Drug Deliv. Rev. 23:3-25. DOI: 10.1016/S0169-409X(96)00423-1."),
+    'if_QC':       ("Quantum chemistry descriptors (g_d field)", "In-house QC calculations."),
+    'if_extra':    ("Extra numerical descriptors (extra_d field)", "User-supplied external descriptors."),
+    'if_m':        ("3D matrix descriptors (3DMatrix field)", "User-supplied 3D matrix descriptors."),
+}
+
+def _write_model_card(pipe, name, metrics, seed, config, flags,
+                      npy_paths, dim_cfg, hpo_best, train_shape, test_shape,
+                      train_time_s, out_path):
+    """
+    生成单个模型的完整信息卡（model_card.txt）。
+    涵盖数据集、特征、模型参数、超参数优化、降维、评估指标、引用文献。
+    """
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    model_step = pipe.named_steps['model']
+    params     = model_step.get_params()
+    long_name, main_cite = _MODEL_CITATIONS.get(name, (name, "N/A"))
+
+    sep = "=" * 70
+
+    lines = [
+        sep,
+        f"  MOLEARN MODEL CARD",
+        sep,
+        f"  Generated : {now}",
+        f"  Model     : {name}",
+        f"  Seed      : {seed}",
+        sep,
+        "",
+        "── 1. 数据集信息 (Dataset) ─────────────────────────────────────────",
+        f"  npy_path    : {', '.join(npy_paths)}",
+        f"  res_folder  : {config.get('res_folder', 'N/A')}",
+        f"  config_file : {config.get('_config_file', 'N/A')}",
+        f"  train_shape : {train_shape[0]} samples × {train_shape[1]} features",
+        f"  test_shape  : {test_shape[0]} samples × {test_shape[1]} features",
+        f"  split_method: {config.get('_split_method', 'random')}",
+        f"  test_ratio  : 0.20 (80/20 split)",
+        "",
+        "── 2. 特征配置 (Feature Flags) ────────────────────────────────────",
+    ]
+
+    active_descriptors = []
+    for flag_key, (desc_name, desc_cite) in _DESCRIPTOR_CITATIONS.items():
+        flag_vals = flags.get(flag_key, [0])
+        if any(v for v in flag_vals):
+            lines.append(f"  [ON]  {flag_key:12s}: {desc_name}")
+            active_descriptors.append((desc_name, desc_cite))
+        else:
+            lines.append(f"  [off] {flag_key:12s}: {desc_name}")
+
+    lines += [
+        "",
+        "── 3. 降维配置 (Dimensionality Reduction) ──────────────────────────",
+    ]
+    dr_method = dim_cfg.get('method', 'none')
+    if dr_method != 'none':
+        lines.append(f"  method      : {dr_method}")
+        for k, v in dim_cfg.items():
+            if k != 'method':
+                lines.append(f"  {k:12s}: {v}")
+    else:
+        lines.append("  method      : none (降维已禁用)")
+
+    lines += [
+        "",
+        "── 4. 模型信息 (Model) ─────────────────────────────────────────────",
+        f"  model_name  : {name}",
+        f"  description : {long_name}",
+        f"  class       : {type(model_step).__name__}",
+        f"  module      : {type(model_step).__module__}",
+    ]
+
+    if 'scaler' in pipe.named_steps:
+        scaler = pipe.named_steps['scaler']
+        lines.append(f"  scaler      : {type(scaler).__name__} (特征标准化)")
+
+    lines += [
+        "",
+        "── 5. 超参数 (Hyperparameters) ─────────────────────────────────────",
+    ]
+    for k, v in sorted(params.items()):
+        lines.append(f"  {k:30s}: {v}")
+
+    if hpo_best:
+        lines += [
+            "",
+            "── 6. 超参数优化最优结果 (HPO Best Params) ────────────────────────",
+            f"  hpo_method  : {config.get('_hpo_method', 'N/A')}",
+        ]
+        for k, v in hpo_best.items():
+            lines.append(f"  {k:30s}: {v}")
+    else:
+        lines.append("")
+        lines.append("── 6. 超参数优化 (HPO) ─────────────────────────────────────────────")
+        lines.append("  HPO 未启用（使用手动设置的超参数）")
+
+    lines += [
+        "",
+        "── 7. 测试集评估指标 (Test Set Metrics) ────────────────────────────",
+    ]
+    for metric, val in metrics.items():
+        lines.append(f"  {metric:8s}: {val:.6f}")
+    lines.append(f"  train_time  : {train_time_s:.2f} s")
+
+    lines += [
+        "",
+        "── 8. 引用文献 (References) ────────────────────────────────────────",
+        "",
+        f"  [1] scikit-learn (主要框架)",
+        f"      Pedregosa et al. (2011). Scikit-learn: Machine Learning in Python.",
+        f"      Journal of Machine Learning Research 12, pp. 2825-2830.",
+        f"      URL: https://scikit-learn.org",
+        "",
+        f"  [2] {name} 算法",
+        f"      {main_cite}",
+        "",
+    ]
+    ref_idx = 3
+    for desc_name, desc_cite in active_descriptors:
+        lines.append(f"  [{ref_idx}] {desc_name}")
+        lines.append(f"      {desc_cite}")
+        lines.append("")
+        ref_idx += 1
+
+    lines += [
+        sep,
+        f"  END OF MODEL CARD",
+        sep,
+    ]
+
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+
+
 def _dump_model_params(pipe, name, metrics: dict, seed: int, out_path: str):
     """
-    将 Pipeline 中 model 步骤的所有参数写入 txt 文件。
-    同时记录训练指标和训练时间，方便复盘。
+    轻量版参数报告（保留向后兼容）。
+    完整信息卡由 _write_model_card() 生成。
     """
     model_step = pipe.named_steps['model']
     params = model_step.get_params()
-
-    # 若 Pipeline 包含 scaler 步骤，也一并记录
     scaler_info = ""
     if 'scaler' in pipe.named_steps:
         scaler = pipe.named_steps['scaler']
@@ -443,6 +712,11 @@ def _run_shap(pipe, name, X_bg, seed, shap_dir):
 seeds       = [int(s.strip()) for s in config.get('seed', '42').split(',')]
 output_base = config.get('res_folder', 'results')
 
+# 将训练上下文注入 config，供 model card 使用
+config['_config_file'] = _config_path
+config['_split_method'] = SPLIT_METHOD
+config['_hpo_method']   = HPO_METHOD if HPO_ENABLE else 'disabled'
+
 for seed in seeds:
     print(f"\n{'='*60}\n  Seed = {seed}\n{'='*60}")
 
@@ -499,6 +773,7 @@ for seed in seeds:
     for name, pipe in models.items():
         try:
             # —— HPO 或直接训练 ——
+            _t0 = datetime.datetime.now()
             if HPO_ENABLE:
                 pipe, best = _run_hpo(pipe, name, X_train, y_train_s, seed)
                 if best:
@@ -507,6 +782,7 @@ for seed in seeds:
                     pipe.fit(X_train, y_train_s)
             else:
                 pipe.fit(X_train, y_train_s)
+            _train_time = (datetime.datetime.now() - _t0).total_seconds()
 
             # —— 评估（在原始标签空间）——
             y_pred = y_scaler.inverse_transform(
@@ -524,12 +800,29 @@ for seed in seeds:
             model_path = os.path.join(out_dir, "models", f"{name}.joblib")
             joblib.dump(pipe, model_path)
 
-            # —— 导出模型参数报告 ——
+            # —— 导出模型参数报告（轻量版）——
             _dump_model_params(
                 pipe, name,
                 metrics={"MAE": mae, "MSE": mse, "R2": r2},
                 seed=seed,
                 out_path=os.path.join(out_dir, "models", f"{name}_params.txt")
+            )
+
+            # —— 生成完整模型信息卡（model_card.txt）——
+            _write_model_card(
+                pipe=pipe,
+                name=name,
+                metrics={"MAE": mae, "MSE": mse, "R2": r2},
+                seed=seed,
+                config=config,
+                flags=flags,
+                npy_paths=ml_npy,
+                dim_cfg=DIM_REDUCTION_CFG,
+                hpo_best=hpo_results.get(name, {}),
+                train_shape=X_train.shape,
+                test_shape=X_test.shape,
+                train_time_s=_train_time,
+                out_path=os.path.join(out_dir, "models", f"{name}_model_card.txt")
             )
 
             # —— 回归散点图 ——

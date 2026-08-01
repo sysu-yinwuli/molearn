@@ -1,0 +1,479 @@
+"""
+feature_utils.py  —— 训练脚本与预测脚本共用的特征工程工具
+
+导入方式（两个脚本同目录）：
+    from feature_utils import load_npy, extract_features, build_header, clean_features,
+                             apply_dim_reduction, fit_dim_reduction, DimReducer
+"""
+
+import os
+import joblib
+import numpy as np
+from tqdm import tqdm
+
+
+# ──────────────────────────────────────────────
+# 描述符键名映射表（npy 字段名  →  列名前缀）
+# 若将来新增描述符类型，只需在此表追加一行即可。
+# ──────────────────────────────────────────────
+_DESCRIPTOR_MAP = [
+    # (if_flag_key, npy_field,          col_prefix)
+    ('if_rdkit',   'rdkit_descriptor',  'rdkit'),
+    ('if_soap',    'soap_descriptor',   'soap'),
+    ('if_acsf',    'acsf_descriptor',   'acsf'),
+    ('if_mordred', 'mordred_descriptor','mordred'),
+    ('if_maccs',   'maccs_descriptor',  'maccs'),
+    ('if_morgan',  'morgan_descriptor', 'morgan'),
+    ('if_QC',      'g_d',               'QC'),
+    ('if_extra',   'extra_d',           'extra'),   # 列名特殊处理，见 build_header
+    ('if_m',       '3DMatrix',          'm'),        # 需要展平，见 extract_features
+]
+
+# 标准特征开关键列表（顺序与 _DESCRIPTOR_MAP 一致）
+FEATURE_FLAG_KEYS = [row[0] for row in _DESCRIPTOR_MAP]
+
+
+# ──────────────────────────────────────────────
+# 1. 加载单个 .npy 文件，返回分子列表
+# ──────────────────────────────────────────────
+def load_npy(path: str) -> list:
+    """
+    加载 create_by_fp.py 生成的 .npy 文件。
+    支持两种格式：
+      - dict with key 'successful'  （create_by_fp.py 输出）
+      - object-dtype ndarray         （旧格式）
+    """
+    raw = np.load(path, allow_pickle=True)
+    if raw.ndim == 0:
+        raw = raw.item()
+    if isinstance(raw, dict) and 'successful' in raw:
+        return list(raw['successful'])
+    if isinstance(raw, np.ndarray) and raw.dtype == object:
+        return list(raw)
+    raise ValueError(
+        f"[load_npy] {path} 格式无法识别。"
+        "期望：dict with 'successful' key，或 object-dtype ndarray。"
+    )
+
+
+# ──────────────────────────────────────────────
+# 2. 从单个分子 dict 提取特征向量
+# ──────────────────────────────────────────────
+def _extract_one(d: dict, flags: dict) -> list:
+    """
+    flags: {flag_key: bool/int, ...}  例如 {'if_rdkit': 1, 'if_soap': 0, ...}
+    返回一个 list[float]，顺序与 _DESCRIPTOR_MAP 一致。
+    """
+    ft = []
+    for flag_key, npy_field, _ in _DESCRIPTOR_MAP:
+        if not flags.get(flag_key, 0):
+            continue
+        if npy_field == '3DMatrix':
+            # 矩阵描述符：每行展平后拼接
+            for row in d.get('3DMatrix', []):
+                ft.extend(row)
+        else:
+            ft.extend(d.get(npy_field, []))
+    return ft
+
+
+# ──────────────────────────────────────────────
+# 3. 批量提取特征（多 npy 文件横向拼接）
+# ──────────────────────────────────────────────
+def extract_features(datas: list, flags_per_file: dict) -> tuple:
+    """
+    参数
+    ----
+    datas          : list of list-of-dicts，每个元素对应一个 npy 文件的分子列表
+    flags_per_file : {flag_key: [int, ...]}，每个 flag 对每个文件的开关值列表
+
+    返回
+    ----
+    features : np.ndarray  shape (n_samples, n_features)
+    labels   : np.ndarray  shape (n_samples,)
+    """
+    n_files = len(datas)
+    n_samples = len(datas[0])
+
+    # 按文件提取，xs[file_idx][sample_idx] = feature list
+    xs = []
+    labels = None
+    for idx, data in enumerate(datas):
+        flags = {k: flags_per_file[k][idx] for k in FEATURE_FLAG_KEYS}
+        x_tmp, y_tmp = [], []
+        for d in tqdm(data, desc=f"提取特征 [{idx+1}/{n_files}]", leave=False):
+            x_tmp.append(_extract_one(d, flags))
+            y_tmp.append(d.get('y', np.nan))
+        xs.append(x_tmp)
+        if labels is None:
+            labels = y_tmp
+
+    # 横向拼接：每个样本把所有文件的特征合并
+    combined = [
+        [item for j in range(n_files) for item in xs[j][i]]
+        for i in range(n_samples)
+    ]
+    features = np.array(combined, dtype=np.float64)
+    labels   = np.array(labels,   dtype=np.float64)
+    return features, labels
+
+
+# ──────────────────────────────────────────────
+# 4. 生成列名（与 extract_features 保持相同顺序）
+# ──────────────────────────────────────────────
+def build_header(datas: list, flags_per_file: dict) -> list:
+    """
+    利用每个文件第 0 个样本的字段长度来生成列名。
+    extra 描述符使用 name_of_extra 中存储的真实名称。
+    """
+    header = []
+    n_files = len(datas)
+    for idx, data in enumerate(datas):
+        d0 = data[0]
+        flags = {k: flags_per_file[k][idx] for k in FEATURE_FLAG_KEYS}
+        for flag_key, npy_field, prefix in _DESCRIPTOR_MAP:
+            if not flags.get(flag_key, 0):
+                continue
+            if npy_field == 'extra_d':
+                names = d0.get('name_of_extra', [])
+                header += [f"{idx}_{n}" for n in names]
+            elif npy_field == '3DMatrix':
+                flat_len = sum(len(row) for row in d0.get('3DMatrix', []))
+                header += [f"m_{idx}_{i}" for i in range(flat_len)]
+            else:
+                length = len(d0.get(npy_field, []))
+                header += [f"{prefix}_{idx}_{i}" for i in range(length)]
+    return header
+
+
+# ──────────────────────────────────────────────
+# 5. 数据清洗：裁剪极值 → NaN → 列均值填充
+# ──────────────────────────────────────────────
+def clean_features(feat: np.ndarray) -> np.ndarray:
+    """
+    原地安全版：不修改输入数组。
+    步骤：① 裁剪 ±1e30  ② inf→NaN  ③ 列均值填充 NaN
+    """
+    if feat.size == 0:
+        raise RuntimeError("[clean_features] 特征矩阵为空（0 列），请检查特征开关配置。")
+    feat = feat.copy()
+    feat = np.clip(feat, -1e30, 1e30)
+    feat[~np.isfinite(feat)] = np.nan
+    col_means = np.nanmean(feat, axis=0)
+    col_means[np.isnan(col_means)] = 0.0          # 全 NaN 的列用 0 填
+    nan_mask = np.isnan(feat)
+    feat[nan_mask] = np.take(col_means, np.where(nan_mask)[1])
+    return feat
+
+
+# ──────────────────────────────────────────────
+# 6. 解析 config-full-*.txt 配置文件
+# ──────────────────────────────────────────────
+def load_config(config_path: str) -> dict:
+    """
+    解析 key: value 格式的配置文件，忽略空行和 # 注释行。
+    """
+    cfg = {}
+    with open(config_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#') or ':' not in line:
+                continue
+            key, val = line.split(':', 1)
+            cfg[key.strip()] = val.strip()
+    return cfg
+
+
+def parse_flags(config: dict, n_files: int) -> dict:
+    """
+    从 config dict 中解析所有 if_xxx 开关，统一广播到长度 n_files 的列表。
+    返回 {flag_key: [int, ...]}
+    """
+    result = {}
+    for key in FEATURE_FLAG_KEYS:
+        raw = config.get(key, '0')
+        lst = [int(x.strip()) for x in raw.split(',')]
+        if len(lst) == 1:
+            lst = lst * n_files
+        if len(lst) != n_files:
+            raise ValueError(
+                f"[parse_flags] '{key}' 长度 ({len(lst)}) 与文件数 ({n_files}) 不一致"
+            )
+        result[key] = lst
+    return result
+
+
+# ──────────────────────────────────────────────
+# 7. 解析脚本相对 / 绝对路径的通用工具
+# ──────────────────────────────────────────────
+def resolve_path(path: str, base_dir: str) -> str:
+    """
+    若 path 是绝对路径直接返回；否则先尝试 base_dir/path，找不到再返回原 path（cwd 相对）。
+    """
+    if os.path.isabs(path):
+        return path
+    candidate = os.path.join(base_dir, path)
+    return candidate if os.path.isfile(candidate) else path
+
+
+# ══════════════════════════════════════════════════════════════
+# 8. 降维工具（DimReducer）
+#    支持：PCA / KernelPCA / TruncatedSVD / UMAP / t-SNE / Autoencoder
+#    训练时：fit_dim_reduction(X_train, cfg) → (reducer, X_reduced)
+#    推理时：apply_dim_reduction(X, reducer_path) → X_reduced
+# ══════════════════════════════════════════════════════════════
+
+# 默认降维配置 —— 可在训练脚本配置区覆盖
+DIM_REDUCTION_DEFAULT = {
+    'method':        'pca',   # 'none'|'pca'|'kpca'|'tsvd'|'umap'|'tsne'|'autoencoder'
+    'n_components':  50,      # 目标维数（autoencoder 忽略此项，用 ae_dims）
+    'whiten':        False,   # 仅 PCA：是否白化
+    'kpca_kernel':   'rbf',   # 仅 KernelPCA：核函数
+    'variance_ratio': None,   # PCA/TSVD：用方差解释率自动决定维数（0~1，None 表示用 n_components）
+    # UMAP 额外参数
+    'umap_n_neighbors': 15,
+    'umap_min_dist':    0.1,
+    'umap_metric':      'euclidean',
+    'umap_random_state': 42,
+    # t-SNE 额外参数（注意：t-SNE 无法用于推理新样本，不建议用于训练流）
+    'tsne_perplexity':  30,
+    'tsne_n_iter':      1000,
+    'tsne_random_state': 42,
+    # Autoencoder 额外参数
+    'ae_dims':       [256, 128, 64],  # 编码器各层节点数；解码器对称
+    'ae_epochs':     50,
+    'ae_batch_size': 64,
+    'ae_lr':         1e-3,
+    'ae_activation': 'relu',
+}
+
+
+class _SklearnReducer:
+    """包装 sklearn/umap 的 fit/transform 接口，统一 DimReducer 调用格式。"""
+    def __init__(self, estimator, method: str):
+        self.estimator = estimator
+        self.method    = method
+
+    def fit_transform(self, X):
+        return self.estimator.fit_transform(X)
+
+    def transform(self, X):
+        if self.method == 'tsne':
+            raise RuntimeError("t-SNE 不支持 transform 新样本，请换用 pca/umap 等方法。")
+        return self.estimator.transform(X)
+
+
+class _AutoencoderReducer:
+    """基于 PyTorch 的轻量 Autoencoder 降维器（可选依赖）。"""
+
+    def __init__(self, input_dim: int, cfg: dict):
+        try:
+            import torch
+            import torch.nn as nn
+            self._torch = torch
+            self._nn    = nn
+        except ImportError:
+            raise ImportError("Autoencoder 降维需要 PyTorch（pip install torch）")
+
+        self.cfg       = cfg
+        self.input_dim = input_dim
+        dims           = cfg.get('ae_dims', [256, 128, 64])
+        act_map        = {'relu': nn.ReLU, 'tanh': nn.Tanh, 'sigmoid': nn.Sigmoid}
+        act            = act_map.get(cfg.get('ae_activation', 'relu'), nn.ReLU)
+
+        # 编码器
+        enc_layers = []
+        prev = input_dim
+        for d in dims:
+            enc_layers += [nn.Linear(prev, d), act()]
+            prev = d
+        self.encoder = nn.Sequential(*enc_layers)
+
+        # 解码器（对称）
+        dec_layers = []
+        for d in reversed(dims[:-1]):
+            dec_layers += [nn.Linear(prev, d), act()]
+            prev = d
+        dec_layers.append(nn.Linear(prev, input_dim))
+        self.decoder = nn.Sequential(*dec_layers)
+
+        self._model_trained = False
+
+    def _get_model(self):
+        import torch.nn as nn
+        class AE(nn.Module):
+            def __init__(self, enc, dec):
+                super().__init__()
+                self.encoder = enc
+                self.decoder = dec
+            def forward(self, x):
+                return self.decoder(self.encoder(x))
+        return AE(self.encoder, self.decoder)
+
+    def fit_transform(self, X: np.ndarray) -> np.ndarray:
+        import torch, torch.nn as nn
+        from torch.utils.data import DataLoader, TensorDataset
+
+        X_t = torch.tensor(X, dtype=torch.float32)
+        loader = DataLoader(TensorDataset(X_t), batch_size=self.cfg.get('ae_batch_size', 64),
+                            shuffle=True)
+        model  = self._get_model()
+        opt    = torch.optim.Adam(model.parameters(), lr=self.cfg.get('ae_lr', 1e-3))
+        loss_fn = nn.MSELoss()
+
+        epochs = self.cfg.get('ae_epochs', 50)
+        for ep in range(epochs):
+            total = 0.0
+            for (batch,) in loader:
+                opt.zero_grad()
+                loss = loss_fn(model(batch), batch)
+                loss.backward()
+                opt.step()
+                total += loss.item()
+            if (ep + 1) % 10 == 0:
+                print(f"    [AE] epoch {ep+1}/{epochs}  loss={total/len(loader):.4f}")
+
+        self.encoder = model.encoder
+        self.decoder = model.decoder
+        self._model_trained = True
+
+        with torch.no_grad():
+            return self.encoder(X_t).numpy()
+
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        import torch
+        if not self._model_trained:
+            raise RuntimeError("Autoencoder 尚未训练，请先调用 fit_transform。")
+        X_t = torch.tensor(X, dtype=torch.float32)
+        with torch.no_grad():
+            return self.encoder(X_t).numpy()
+
+
+class DimReducer:
+    """
+    统一降维接口。
+
+    用法（训练阶段）：
+        reducer = DimReducer(cfg=DIM_REDUCTION_CFG)
+        X_reduced = reducer.fit_transform(X_train)
+        reducer.save('results/seed_42/dim_reducer.pkl')
+
+    用法（推理阶段）：
+        reducer = DimReducer.load('results/seed_42/dim_reducer.pkl')
+        X_reduced = reducer.transform(X_new)
+    """
+
+    def __init__(self, cfg: dict | None = None):
+        self.cfg     = {**DIM_REDUCTION_DEFAULT, **(cfg or {})}
+        self.method  = self.cfg['method'].lower()
+        self._inner  = None  # 实际的降维器实例
+
+    # ── 构建 ──────────────────────────────────────────────────────────────────
+    def _build(self, input_dim: int):
+        m   = self.method
+        cfg = self.cfg
+        n   = cfg.get('n_components', 50)
+        vr  = cfg.get('variance_ratio')
+
+        if m == 'none':
+            return None
+
+        if m == 'pca':
+            from sklearn.decomposition import PCA
+            nc = (vr if vr else n)
+            return _SklearnReducer(PCA(n_components=nc, whiten=cfg.get('whiten', False),
+                                       random_state=42), 'pca')
+
+        if m == 'kpca':
+            from sklearn.decomposition import KernelPCA
+            return _SklearnReducer(KernelPCA(n_components=n,
+                                              kernel=cfg.get('kpca_kernel', 'rbf'),
+                                              random_state=42, fit_inverse_transform=False), 'kpca')
+
+        if m == 'tsvd':
+            from sklearn.decomposition import TruncatedSVD
+            nc = (vr if vr else n)
+            return _SklearnReducer(TruncatedSVD(n_components=min(n, input_dim - 1),
+                                                 random_state=42), 'tsvd')
+
+        if m == 'umap':
+            try:
+                from umap import UMAP
+            except ImportError:
+                raise ImportError("UMAP 降维需要 umap-learn（pip install umap-learn）")
+            return _SklearnReducer(UMAP(n_components=n,
+                                        n_neighbors=cfg.get('umap_n_neighbors', 15),
+                                        min_dist=cfg.get('umap_min_dist', 0.1),
+                                        metric=cfg.get('umap_metric', 'euclidean'),
+                                        random_state=cfg.get('umap_random_state', 42)), 'umap')
+
+        if m == 'tsne':
+            from sklearn.manifold import TSNE
+            print("[WARN] t-SNE 不支持 transform 新样本，仅建议用于可视化，不建议用于训练流！")
+            return _SklearnReducer(TSNE(n_components=min(n, 3),
+                                        perplexity=cfg.get('tsne_perplexity', 30),
+                                        n_iter=cfg.get('tsne_n_iter', 1000),
+                                        random_state=cfg.get('tsne_random_state', 42)), 'tsne')
+
+        if m == 'autoencoder':
+            return _AutoencoderReducer(input_dim, cfg)
+
+        raise ValueError(f"[DimReducer] 不支持的降维方法: '{m}'，"
+                         "可选: none/pca/kpca/tsvd/umap/tsne/autoencoder")
+
+    # ── 训练 & 变换 ────────────────────────────────────────────────────────────
+    def fit_transform(self, X: np.ndarray) -> np.ndarray:
+        """在训练集上拟合并降维，返回降维后特征矩阵。"""
+        if self.method == 'none':
+            print("[DimReducer] 降维方法=none，跳过降维")
+            return X
+        self._inner = self._build(X.shape[1])
+        print(f"[DimReducer] method={self.method}  输入维度={X.shape[1]}")
+        X_r = self._inner.fit_transform(X)
+        # 若使用方差比例，打印实际保留维数
+        if self.method == 'pca' and hasattr(self._inner.estimator, 'n_components_'):
+            print(f"[DimReducer] PCA 方差解释率={self.cfg['variance_ratio']}  "
+                  f"保留主成分={self._inner.estimator.n_components_}")
+        print(f"[DimReducer] 输出维度={X_r.shape[1]}")
+        return X_r
+
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        """用已拟合的降维器变换新样本。"""
+        if self.method == 'none' or self._inner is None:
+            return X
+        return self._inner.transform(X)
+
+    # ── 持久化 ────────────────────────────────────────────────────────────────
+    def save(self, path: str):
+        """保存降维器到 .pkl 文件（使用 joblib）。"""
+        joblib.dump(self, path)
+        print(f"[DimReducer] 已保存到: {path}")
+
+    @staticmethod
+    def load(path: str) -> 'DimReducer':
+        """从 .pkl 文件加载降维器。"""
+        obj = joblib.load(path)
+        print(f"[DimReducer] 已加载自: {path}")
+        return obj
+
+
+def fit_dim_reduction(X_train: np.ndarray, cfg: dict) -> tuple:
+    """
+    便捷函数：拟合并降维训练集。
+    返回 (DimReducer 实例, X_train_reduced)
+    """
+    reducer = DimReducer(cfg=cfg)
+    X_r     = reducer.fit_transform(X_train)
+    return reducer, X_r
+
+
+def apply_dim_reduction(X: np.ndarray, reducer_or_path) -> np.ndarray:
+    """
+    便捷函数：用已有 DimReducer 或其路径对 X 做变换。
+    reducer_or_path: DimReducer 实例 或 str(路径)
+    """
+    if isinstance(reducer_or_path, str):
+        reducer = DimReducer.load(reducer_or_path)
+    else:
+        reducer = reducer_or_path
+    return reducer.transform(X)

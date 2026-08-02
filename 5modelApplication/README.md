@@ -178,3 +178,68 @@ seed: 42
 ```
 
 > 新版训练脚本（Round 5+）新增 `if_atompair`、`if_torsion`、`if_avalon`、`if_mbtr`、`if_prop` 选项，推理时配置文件需同步更新。
+
+---
+
+## 分类推理模式（Classification Inference）
+
+`usemodel.py` 已更新为回归/分类双模式。**无需修改脚本逻辑**，任务类型从训练目录自动检测：
+
+```python
+# usemodel.py 顶部配置
+MODEL_NAME = 'RandomForestClassifier'   # 分类模型名
+TASK_TYPE  = 'auto'                     # 自动读取 task_type.pkl
+```
+
+### 自动检测机制
+
+加载顺序：
+
+1. 读取 `MODEL_DIR/task_type.pkl`（Round 7+ 训练输出时自动生成）
+2. 若不存在但有 `y_scaler.pkl`，推断为 `regression`
+3. 若两者均不存在，默认 `regression`
+
+也可手动指定：
+
+```python
+TASK_TYPE = 'classification'   # 强制覆盖自动检测
+```
+
+### 分类推理输出 CSV
+
+```csv
+sample_name,y_true,y_pred,prob_class_0,prob_class_1,prob_class_2
+mol_001,0,0,0.823451,0.124230,0.052319
+mol_002,1,1,0.034512,0.891023,0.074465
+mol_003,2,2,0.021100,0.063200,0.915700
+```
+
+- `y_pred`：预测类别整数标签
+- `prob_class_N`：各类别预测概率（仅当模型支持 `predict_proba` 时才有这些列）
+- `y_true`：若 npy 中没有真实标签则为 NaN
+
+### 推理数据流（分类模式）
+
+```
+待预测 npy
+         ↓
+特征提取（feature_utils.extract_features）
+         ↓
+[可选] DimReducer.transform
+         ↓
+pd.DataFrame(columns=training_columns)
+         ↓
+pipe.predict(X_df)         → y_pred 标签
+pipe.predict_proba(X_df)   → 各类别概率（支持 predict_proba 的模型）
+         ↓
+输出 CSV（含类别概率列）
+```
+
+### 输出文件内容说明
+
+| 列名 | 回归 | 分类 |
+|------|------|------|
+| `sample_name` | 分子名 | 分子名 |
+| `y_true` | 真实连续值 | 真实整数标签（无标签则 NaN）|
+| `y_pred` | 预测连续值 | 预测整数标签 |
+| `prob_class_N` | — | 第 N 类概率（0.0~1.0）|

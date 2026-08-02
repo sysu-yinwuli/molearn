@@ -116,6 +116,15 @@ step3_descriptor:
   # Mordred 参数
   mordred_ignore_3d: true
 
+  # ── 皮尔逊相关性筛选（Pearson Correlation Filter）──────────────────────────
+  # 在 create_by_fp.py 生成描述符 npy 后，可选执行共线性剔除
+  pearson_filter:         false          # true=启用共线性筛选，false=跳过
+  pearson_threshold:      0.95           # |r| > 阈值的特征对，低方差者被剔除
+  pearson_output_npy:     ""             # 留空则自动命名（输入名 + _pearson.npy）
+  pearson_report_xlsx:    ""             # 留空则自动命名（pearson_removal_report.xlsx）
+  pearson_gen_heatmap:    true           # 是否生成相关性热图（维度 ≤ heatmap_max_dim 时）
+  pearson_heatmap_max_dim: 300          # 超过此维度不生成热图（避免图太大）
+
 # ── Step 4: 数据抽样 (1dataProcess/sample_npy.py) ──────────────────────────────
 step4_sampling:
   enabled:      false
@@ -152,7 +161,12 @@ step6_train:
   split_method: "random"                       # random | stratified
   split_n_bins:  5                             # stratified 时的分箱数
 
-  # 模型开关（false=跳过该模型）
+  # ── 任务类型 ─────────────────────────────────────────────────────────────────
+  # 'regression'    : 回归任务（标签为连续数值，如能量、溶解度）
+  # 'classification': 分类任务（标签为整数类别，如 0/1/2/3 等）
+  task_type: "regression"
+
+  # 模型开关（回归模式启用以下模型，false=跳过）
   models:
     LinearRegression:    true
     Ridge:               true
@@ -170,6 +184,21 @@ step6_train:
     SVR:                 true
     KNeighbors:          true
     MLP:                 true
+
+  # 分类模式启用以下模型（task_type='classification' 时生效）
+  clf_models:
+    LogisticRegression:       true
+    RidgeClassifier:          true
+    SVC:                      true
+    KNeighborsClassifier:     true
+    DecisionTreeClassifier:   true
+    RandomForestClassifier:   true
+    ExtraTreesClassifier:     true
+    GradientBoostingClassifier: true
+    HistGBClassifier:         true
+    AdaBoostClassifier:       true
+    MLPClassifier:            true
+    GaussianNB:               true
 
   # 特征开关（与 3descriptor 描述符类型对应）
   features:

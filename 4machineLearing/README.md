@@ -314,3 +314,82 @@ if_m:        0    # 3D 矩阵描述符
 ```
 
 > **提示**：通过 `molearn.yaml` 的 `step6_train.features` 节统一管理这些开关，无需手动编辑此文件。
+
+---
+
+## 分类模式（Classification Mode）
+
+`ml-m-full.py` 完全支持分类任务。只需在文件顶部将 `TASK_TYPE` 改为 `'classification'`：
+
+```python
+TASK_TYPE = 'classification'   # 'regression' | 'classification'
+```
+
+或在 `molearn.yaml` 中设置：
+
+```yaml
+step6_train:
+  task_type: "classification"
+```
+
+### 支持的 12 种分类模型
+
+| 模型名 | 类型 |
+|--------|------|
+| `LogisticRegression` | 线性分类器 |
+| `RidgeClassifier` | 岭分类器 |
+| `SVC` | 支持向量分类（RBF 核，probability=True）|
+| `KNeighborsClassifier` | K 近邻分类器 |
+| `DecisionTreeClassifier` | 决策树分类器 |
+| `RandomForestClassifier` | 随机森林分类器 |
+| `ExtraTreesClassifier` | 极端随机树分类器 |
+| `GradientBoostingClassifier` | 梯度提升分类器 |
+| `HistGBClassifier` | 直方图梯度提升分类器 |
+| `AdaBoostClassifier` | 自适应提升分类器 |
+| `MLPClassifier` | 多层感知机分类器 |
+| `GaussianNB` | 高斯朴素贝叶斯分类器 |
+
+### 分类标签格式
+
+标签必须为整数（0, 1, 2, ... 等）。分子 npy 中 `y` 字段示例：
+
+```python
+# 二分类
+{'name': 'mol_001', 'y': 0, ...}
+{'name': 'mol_002', 'y': 1, ...}
+
+# 四分类
+{'name': 'mol_003', 'y': 0, ...}   # 类别 0
+{'name': 'mol_004', 'y': 3, ...}   # 类别 3
+```
+
+### 分类任务输出
+
+训练完成后，每个模型在 `seed_N/` 目录生成：
+
+```
+seed_42/
+├── models/
+│   ├── RandomForestClassifier.joblib      ← 分类模型文件
+│   ├── RandomForestClassifier_params.txt  ← 轻量参数报告
+│   ├── RandomForestClassifier_model_card.txt ← 完整信息卡（含分类指标）
+│   ├── task_type.pkl                      ← 'classification' 字符串
+│   └── classes.pkl                        ← 类别列表 [0, 1, 2, ...]
+├── images/
+│   └── RandomForestClassifier_cm.png      ← 混淆矩阵图
+├── results/
+│   ├── results.txt                        ← Accuracy / F1 / AUC 汇总
+│   └── RandomForestClassifier_clf_report.txt ← sklearn classification_report
+└── shap/
+    └── RandomForestClassifier_summary.png ← SHAP 分析图（树模型）
+```
+
+### 分类评估指标
+
+| 指标 | 说明 |
+|------|------|
+| `Accuracy` | 整体准确率 |
+| `F1_weighted` | 加权平均 F1 分数（支持多分类）|
+| `AUC` | ROC-AUC（二分类用概率，多分类用 ovr 加权均值）|
+
+> 注：`RidgeClassifier` 不输出概率，AUC 计算使用 `decision_function`。`GaussianNB` 在部分高维场景下 AUC 可能为 N/A。

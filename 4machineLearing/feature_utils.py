@@ -3,7 +3,14 @@ feature_utils.py  —— 训练脚本与预测脚本共用的特征工程工具
 
 导入方式（两个脚本同目录）：
     from feature_utils import load_npy, extract_features, build_header, clean_features,
-                             apply_dim_reduction, fit_dim_reduction, DimReducer
+                             apply_dim_reduction, fit_dim_reduction, DimReducer,
+                             PathManager, npy_save, npy_load
+
+新增功能：
+  - PathManager  : 全项目统一路径管理类
+  - npy_save     : 统一 .npy 保存接口（自动创建目录）
+  - npy_load     : 统一 .npy 加载接口（兼容旧/新格式）
+  - TASK_MODE    : 全局任务类型标记（'regression' | 'classification'）
 """
 
 import os
@@ -12,21 +19,160 @@ import numpy as np
 from tqdm import tqdm
 
 
+# ══════════════════════════════════════════════════════════════════════
+# 路径管理器（PathManager）
+# 统一管理项目中所有数据/输出文件的路径，
+# 支持从 molearn.yaml 的 paths: 节读取，也可直接构造
+# ══════════════════════════════════════════════════════════════════════
+
+class PathManager:
+    """
+    统一路径管理：提供各阶段输入/输出文件的完整路径。
+
+    用法：
+        pm = PathManager(base_dir='/path/to/project')
+        # 或从 molearn.yaml 中的 paths: 节初始化
+        pm = PathManager.from_yaml_paths(yaml_paths_dict, base_dir)
+
+        # 路径访问（自动创建目录）
+        pm.descriptor_npy('dataset-fp.npy')
+        pm.training_output('seed_42/models/RandomForest.joblib')
+        pm.prediction_output('result.csv')
+    """
+
+    # 路径键 → 默认子目录名
+    _DEFAULTS = {
+        'raw_gjf':          'data/raw/gjf',
+        'raw_xyz':          'data/raw/xyz',
+        'processed_npy':    'data/processed',
+        'descriptor_npy':   'data/descriptors',
+        'samples_dir':      'data/samples',
+        'splits_dir':       'data/splits',
+        'training_output':  'outputs/training',
+        'analysis_output':  'outputs/analysis',
+        'sa_score_output':  'outputs/sa_scores',
+        'similarity_output':'outputs/similarity',
+        'prediction_output':'outputs/predictions',
+    }
+
+    def __init__(self, base_dir: str = '.', paths_cfg: dict = None):
+        """
+        参数
+        ----
+        base_dir  : 项目根目录（所有相对路径基于此解析）
+        paths_cfg : 路径配置字典（对应 molearn.yaml paths: 节），
+                    缺失的键使用 _DEFAULTS 补全
+        """
+        self.base_dir = os.path.abspath(base_dir)
+        self._cfg     = dict(self._DEFAULTS)
+        if paths_cfg:
+            self._cfg.update(paths_cfg)
+
+    @classmethod
+    def from_yaml_paths(cls, yaml_paths: dict, base_dir: str = '.') -> 'PathManager':
+        """从 molearn.yaml paths: 节构造 PathManager。"""
+        return cls(base_dir=base_dir, paths_cfg=yaml_paths)
+
+    def _resolve(self, key: str, filename: str = '') -> str:
+        """返回 key 对应目录下的完整路径，自动创建目录。"""
+        rel_dir = self._cfg.get(key, self._DEFAULTS.get(key, key))
+        if os.path.isabs(rel_dir):
+            full_dir = rel_dir
+        else:
+            full_dir = os.path.join(self.base_dir, rel_dir)
+        os.makedirs(full_dir, exist_ok=True)
+        return os.path.join(full_dir, filename) if filename else full_dir
+
+    # ── 常用路径快捷方法 ──────────────────────────────────────────────
+    def raw_gjf(self,       f: str = '') -> str: return self._resolve('raw_gjf',          f)
+    def raw_xyz(self,       f: str = '') -> str: return self._resolve('raw_xyz',           f)
+    def processed_npy(self, f: str = '') -> str: return self._resolve('processed_npy',    f)
+    def descriptor_npy(self,f: str = '') -> str: return self._resolve('descriptor_npy',   f)
+    def samples_dir(self,   f: str = '') -> str: return self._resolve('samples_dir',      f)
+    def splits_dir(self,    f: str = '') -> str: return self._resolve('splits_dir',       f)
+    def training_output(self,f: str= '') -> str: return self._resolve('training_output',  f)
+    def analysis_output(self,f: str= '') -> str: return self._resolve('analysis_output',  f)
+    def sa_score_output(self,f: str= '') -> str: return self._resolve('sa_score_output',  f)
+    def similarity_output(self,f:str='')-> str: return self._resolve('similarity_output', f)
+    def prediction_output(self,f:str='')-> str: return self._resolve('prediction_output', f)
+
+    def get(self, key: str, filename: str = '') -> str:
+        """通用方法：按键名获取路径。"""
+        return self._resolve(key, filename)
+
+    def __repr__(self):
+        lines = [f"PathManager(base_dir={self.base_dir})"]
+        for k, v in self._cfg.items():
+            lines.append(f"  {k}: {v}")
+        return '\n'.join(lines)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 统一 .npy 存取接口
+# ══════════════════════════════════════════════════════════════════════
+
+def npy_save(path: str, data, extra_meta: dict = None):
+    """
+    保存 .npy 文件，自动创建父目录。
+
+    data 可以是：
+      - dict（已有 'successful' 等键）  → 直接保存
+      - list（分子列表）                → 包装为 {'successful': data}
+      - np.ndarray                       → 直接保存
+
+    extra_meta : 追加到 dict 中的元数据（如 pearson_filter 统计信息）
+    """
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    if isinstance(data, list):
+        save_obj = {'successful': data}
+    elif isinstance(data, dict):
+        save_obj = data
+    else:
+        np.save(path, data, allow_pickle=True)
+        return
+    if extra_meta:
+        save_obj.update(extra_meta)
+    np.save(path, save_obj, allow_pickle=True)
+
+
+def npy_load(path: str) -> list:
+    """
+    加载 .npy 文件，返回分子列表。
+    兼容：dict with 'successful'  /  object-dtype ndarray
+    """
+    raw = np.load(path, allow_pickle=True)
+    if raw.ndim == 0:
+        raw = raw.item()
+    if isinstance(raw, dict) and 'successful' in raw:
+        return list(raw['successful'])
+    if isinstance(raw, np.ndarray) and raw.dtype == object:
+        return list(raw)
+    raise ValueError(
+        f"[npy_load] {path} 格式无法识别。"
+        "期望：dict with 'successful' key，或 object-dtype ndarray。"
+    )
+
+
 # ──────────────────────────────────────────────
 # 描述符键名映射表（npy 字段名  →  列名前缀）
 # 若将来新增描述符类型，只需在此表追加一行即可。
 # ──────────────────────────────────────────────
 _DESCRIPTOR_MAP = [
     # (if_flag_key, npy_field,          col_prefix)
-    ('if_rdkit',   'rdkit_descriptor',  'rdkit'),
-    ('if_soap',    'soap_descriptor',   'soap'),
-    ('if_acsf',    'acsf_descriptor',   'acsf'),
-    ('if_mordred', 'mordred_descriptor','mordred'),
-    ('if_maccs',   'maccs_descriptor',  'maccs'),
-    ('if_morgan',  'morgan_descriptor', 'morgan'),
-    ('if_QC',      'g_d',               'QC'),
-    ('if_extra',   'extra_d',           'extra'),   # 列名特殊处理，见 build_header
-    ('if_m',       '3DMatrix',          'm'),        # 需要展平，见 extract_features
+    ('if_rdkit',     'rdkit_descriptor',   'rdkit'),
+    ('if_soap',      'soap_descriptor',    'soap'),
+    ('if_acsf',      'acsf_descriptor',    'acsf'),
+    ('if_mordred',   'mordred_descriptor', 'mordred'),
+    ('if_maccs',     'maccs_descriptor',   'maccs'),
+    ('if_morgan',    'morgan_descriptor',  'morgan'),
+    ('if_atompair',  'atompair_descriptor','AP'),
+    ('if_torsion',   'torsion_descriptor', 'TT'),
+    ('if_avalon',    'avalon_descriptor',  'Avalon'),
+    ('if_mbtr',      'mbtr_descriptor',    'MBTR'),
+    ('if_prop',      'prop_descriptor',    'prop'),
+    ('if_QC',        'g_d',                'QC'),
+    ('if_extra',     'extra_d',            'extra'),   # 列名特殊处理，见 build_header
+    ('if_m',         '3DMatrix',           'm'),        # 需要展平，见 extract_features
 ]
 
 # 标准特征开关键列表（顺序与 _DESCRIPTOR_MAP 一致）
@@ -38,22 +184,12 @@ FEATURE_FLAG_KEYS = [row[0] for row in _DESCRIPTOR_MAP]
 # ──────────────────────────────────────────────
 def load_npy(path: str) -> list:
     """
-    加载 create_by_fp.py 生成的 .npy 文件。
+    加载 create_by_fp.py 生成的 .npy 文件（npy_load 的别名，保持向后兼容）。
     支持两种格式：
       - dict with key 'successful'  （create_by_fp.py 输出）
       - object-dtype ndarray         （旧格式）
     """
-    raw = np.load(path, allow_pickle=True)
-    if raw.ndim == 0:
-        raw = raw.item()
-    if isinstance(raw, dict) and 'successful' in raw:
-        return list(raw['successful'])
-    if isinstance(raw, np.ndarray) and raw.dtype == object:
-        return list(raw)
-    raise ValueError(
-        f"[load_npy] {path} 格式无法识别。"
-        "期望：dict with 'successful' key，或 object-dtype ndarray。"
-    )
+    return npy_load(path)
 
 
 # ──────────────────────────────────────────────
@@ -63,15 +199,31 @@ def _extract_one(d: dict, flags: dict) -> list:
     """
     flags: {flag_key: bool/int, ...}  例如 {'if_rdkit': 1, 'if_soap': 0, ...}
     返回一个 list[float]，顺序与 _DESCRIPTOR_MAP 一致。
+
+    特殊处理：
+      - '3DMatrix'      : 每行展平后拼接
+      - 'prop_descriptor': create_by_fp.py 将基础属性存为独立字段（dict key），
+                          此处优先读取 'prop_descriptor' 向量；若不存在，回退到
+                          各属性字段（MolWt/MolLogP 等）收集
     """
     ft = []
     for flag_key, npy_field, _ in _DESCRIPTOR_MAP:
         if not flags.get(flag_key, 0):
             continue
         if npy_field == '3DMatrix':
-            # 矩阵描述符：每行展平后拼接
             for row in d.get('3DMatrix', []):
                 ft.extend(row)
+        elif npy_field == 'prop_descriptor':
+            # 优先读取预存向量
+            if 'prop_descriptor' in d and d['prop_descriptor']:
+                ft.extend(d['prop_descriptor'])
+            else:
+                # 回退：从个别属性字段收集（兼容旧版 create_by_fp.py）
+                _PROP_KEYS = ['MolWt', 'HeavyAtomCount', 'NumHAcceptors',
+                              'NumHDonors', 'MolLogP', 'TPSA',
+                              'NumRotatableBonds', 'NumAromaticRings',
+                              'NumRings', 'FractionCSP3', 'NumHeteroatoms']
+                ft.extend([float(d.get(k, float('nan'))) for k in _PROP_KEYS])
         else:
             ft.extend(d.get(npy_field, []))
     return ft
@@ -125,24 +277,45 @@ def build_header(datas: list, flags_per_file: dict) -> list:
     """
     利用每个文件第 0 个样本的字段长度来生成列名。
     extra 描述符使用 name_of_extra 中存储的真实名称。
+    mordred/rdkit 等已存有列名的字段使用已有名称（更易读）。
     """
+    _PROP_KEYS = ['MolWt', 'HeavyAtomCount', 'NumHAcceptors', 'NumHDonors',
+                  'MolLogP', 'TPSA', 'NumRotatableBonds', 'NumAromaticRings',
+                  'NumRings', 'FractionCSP3', 'NumHeteroatoms']
+
     header = []
     n_files = len(datas)
     for idx, data in enumerate(datas):
-        d0 = data[0]
+        d0    = data[0]
         flags = {k: flags_per_file[k][idx] for k in FEATURE_FLAG_KEYS}
         for flag_key, npy_field, prefix in _DESCRIPTOR_MAP:
             if not flags.get(flag_key, 0):
                 continue
+
             if npy_field == 'extra_d':
                 names = d0.get('name_of_extra', [])
                 header += [f"{idx}_{n}" for n in names]
+
             elif npy_field == '3DMatrix':
                 flat_len = sum(len(row) for row in d0.get('3DMatrix', []))
                 header += [f"m_{idx}_{i}" for i in range(flat_len)]
+
+            elif npy_field == 'prop_descriptor':
+                # 优先读向量长度；回退到预定义的属性名
+                if 'prop_descriptor' in d0 and d0['prop_descriptor']:
+                    length = len(d0['prop_descriptor'])
+                    header += [f"{prefix}_{idx}_{i}" for i in range(length)]
+                else:
+                    header += [f"prop_{idx}_{k}" for k in _PROP_KEYS]
+
             else:
-                length = len(d0.get(npy_field, []))
-                header += [f"{prefix}_{idx}_{i}" for i in range(length)]
+                # 使用已存的列名字段（如 rdkit_f / mordred_f / morgan_f 等）
+                names_field = npy_field.replace('_descriptor', '_f')
+                if names_field in d0 and d0[names_field]:
+                    header += [f"{prefix}_{idx}_{n}" for n in d0[names_field]]
+                else:
+                    length = len(d0.get(npy_field, []))
+                    header += [f"{prefix}_{idx}_{i}" for i in range(length)]
     return header
 
 
@@ -187,12 +360,19 @@ def load_config(config_path: str) -> dict:
 def parse_flags(config: dict, n_files: int) -> dict:
     """
     从 config dict 中解析所有 if_xxx 开关，统一广播到长度 n_files 的列表。
+    支持 str（"1,0"格式）、int/bool、list 类型的 config 值。
     返回 {flag_key: [int, ...]}
     """
     result = {}
     for key in FEATURE_FLAG_KEYS:
-        raw = config.get(key, '0')
-        lst = [int(x.strip()) for x in raw.split(',')]
+        raw = config.get(key, 0)
+        # 支持多种输入类型
+        if isinstance(raw, (list, tuple)):
+            lst = [int(v) for v in raw]
+        elif isinstance(raw, str):
+            lst = [int(x.strip()) for x in raw.split(',')]
+        else:
+            lst = [int(raw)]
         if len(lst) == 1:
             lst = lst * n_files
         if len(lst) != n_files:

@@ -331,3 +331,90 @@ DE_COLS     = list(range(1, 34))   # 要读取的列索引
 | mbtr | 与 grid['n'] 和元素数有关 | 典型值 2000~5000 |
 | mordred | ~1600（2D）/ ~1800（全） | 高维，含 NaN 需清洗 |
 | prop | 11 | 固定 11 个属性 |
+
+---
+
+## pearson_filter.py — 皮尔逊相关性共线性筛选
+
+对描述符矩阵执行贪心 Pearson 相关性过滤，剔除高度共线的低方差特征，并输出 `.npy` 过滤结果和 Excel 报告。
+
+### 基本用法
+
+```bash
+# 使用默认配置（threshold=0.95），读取 create_by_fp.py 输出的 npy
+python pearson_filter.py
+
+# 指定阈值和输入文件
+python pearson_filter.py --input dataset-fp.npy --threshold 0.90
+
+# 仅生成分析报告（不写 npy，不生成热图）
+python pearson_filter.py --threshold 0.95 --mode report
+
+# 仅生成相关性热图
+python pearson_filter.py --mode heatmap
+
+# 跳过热图生成
+python pearson_filter.py --threshold 0.95 --no-heatmap
+```
+
+### CONFIG 配置说明
+
+```python
+CONFIG = {
+    'input_npy':       'poly-all-fp.npy',  # 输入 npy 文件
+    'output_npy':      '',                 # 留空则自动命名 <input>_pearson.npy
+    'report_xlsx':     '',                 # 留空则自动命名 pearson_removal_report.xlsx
+    'output_dir':      '',                 # 留空则与 input_npy 同目录
+    'threshold':       0.95,              # |r| 超过此值的低方差特征被剔除
+    'descriptor_fields': [],              # 留空则自动检测所有描述符字段
+    'gen_heatmap':     True,              # 是否生成相关性热图
+    'heatmap_max_dim': 300,               # 维度超过此值时跳过热图（避免过大）
+    'heatmap_filename': '',               # 留空则自动命名
+    'mode':            'filter',          # 'filter' | 'report' | 'heatmap'
+}
+```
+
+### 算法说明
+
+1. **常量列先剔除**：方差为 0 的特征列直接标记为删除
+2. **按方差降序排列**：确保高信息量特征优先保留
+3. **贪心扫描**：对每个保留特征 *i*，扫描其后所有特征 *j*；若 `|r(i,j)| > threshold`，则将 *j* 标记为删除
+4. **输出**：过滤后的 `.npy`（每个分子的描述符向量已截断）+ Excel 报告 + 可选热图
+
+### Excel 报告结构（3 个工作表）
+
+| 工作表 | 内容 |
+|--------|------|
+| `过滤汇总` | 保留/删除的特征名列表 |
+| `共线对明细` | 每对相关性超阈值的特征 + r 值 |
+| `统计摘要` | 原始维度、保留维度、删除数量、threshold 等汇总信息 |
+
+### 与 create_by_fp.py 集成
+
+在 `create_by_fp.py` 的 `CONFIG` 中开启：
+
+```python
+'pearson_filter':      True,   # 计算描述符后自动执行 Pearson 筛选
+'pearson_threshold':   0.95,
+'pearson_gen_heatmap': True,
+```
+
+也可在 `molearn.yaml` 的 `step3_descriptor` 节中统一配置：
+
+```yaml
+step3_descriptor:
+  pearson_filter:        true
+  pearson_threshold:     0.95
+  pearson_gen_heatmap:   true
+  pearson_heatmap_max_dim: 300
+```
+
+### 典型工作流（含 Pearson 筛选）
+
+```
+create_by_fp.py → dataset-fp.npy
+        ↓
+pearson_filter.py → dataset-fp_pearson.npy + pearson_removal_report.xlsx
+        ↓
+4machineLearing/ml-m-full.py（使用过滤后的 npy）
+```

@@ -1,0 +1,100 @@
+# =============================================================================
+#  Molearn — Python 依赖安装文件
+#  安装命令：pip install -r requirements.txt
+#
+#  推荐 Python 版本：3.9 ~ 3.11
+#  推荐虚拟环境：
+#    conda create -n molearn python=3.10 && conda activate molearn
+#    或
+#    python -m venv .venv && source .venv/bin/activate  (Linux/Mac)
+#    python -m venv .venv && .venv\Scripts\activate     (Windows)
+#
+#  安装说明：
+#    1. 基础安装（大多数功能）：
+#         pip install -r requirements.txt
+#    2. 带 GPU 加速的 PyTorch（自编码器降维）：
+#         pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu121
+#    3. DScribe（SOAP/ACSF/MBTR 描述符）需要额外步骤，见下方注释
+#    4. SCSCore/SYBA/RASCore 合成可行性工具，见下方注释
+# =============================================================================
+
+# ─── 核心科学计算 ─────────────────────────────────────────────────────────────
+numpy>=1.24.0,<2.0.0
+scipy>=1.11.0,<2.0.0
+pandas>=2.0.0,<3.0.0
+
+# ─── 机器学习 ─────────────────────────────────────────────────────────────────
+scikit-learn>=1.3.0,<2.0.0
+joblib>=1.3.0
+
+# ─── 超参数优化（可选，用于 HPO_METHOD='optuna'）──────────────────────────────
+optuna>=3.4.0,<4.0.0
+
+# ─── 可解释性分析 ─────────────────────────────────────────────────────────────
+shap>=0.44.0,<0.47.0
+
+# ─── 可视化 ───────────────────────────────────────────────────────────────────
+matplotlib>=3.7.0,<4.0.0
+seaborn>=0.13.0,<0.14.0
+
+# ─── 化学信息学（核心）────────────────────────────────────────────────────────
+rdkit>=2023.3.3
+# 注意：rdkit 通过 PyPI 安装时包名为 rdkit（>=2022.09 起官方提供 wheel）
+# 若 pip 安装失败，可用 conda：conda install -c conda-forge rdkit
+
+mordred>=1.2.0
+# mordred 计算 Mordred 分子描述符（~1800+ 描述符）
+
+# ─── Avalon 指纹（可选）──────────────────────────────────────────────────────
+# pyAvalonTools 依赖 rdkit，通常随 rdkit 一起提供
+# 若 avalon_descriptor 启用失败，单独安装：
+#   pip install pyAvalonTools
+# pyAvalonTools>=1.0.0  # 按需解除注释
+
+# ─── DScribe（SOAP / ACSF / MBTR 描述符）─────────────────────────────────────
+# DScribe 需要 ASE 和 C++ 编译环境
+# pip install dscribe ase
+# Windows 用户建议先安装 Visual C++ Build Tools：
+#   https://visualstudio.microsoft.com/visual-cpp-build-tools/
+dscribe>=2.1.0,<3.0.0
+ase>=3.22.0,<4.0.0
+
+# ─── 降维（可选）─────────────────────────────────────────────────────────────
+umap-learn>=0.5.4,<0.6.0    # UMAP 降维
+
+# PyTorch（自编码器降维，可选）
+# CPU 版本（所有平台）：
+# torch>=2.1.0,<2.4.0
+# CUDA 12.1 GPU 版本（Linux/Windows）：
+# 请使用专用安装命令，见文件头部说明
+
+# ─── Excel / 报告导出 ─────────────────────────────────────────────────────────
+openpyxl>=3.1.0,<4.0.0      # 写入 Excel（.xlsx）报告（Pearson 过滤报告等）
+xlrd>=2.0.1,<3.0.0          # 读取旧版 .xls 文件
+
+# ─── YAML 配置解析 ────────────────────────────────────────────────────────────
+PyYAML>=6.0,<7.0             # molearn.yaml 解析（molearn_run.py 使用）
+
+# ─── Web GUI（molearn_gui.py，可选）─────────────────────────────────────────
+Flask>=3.0.0,<4.0.0
+Flask-Cors>=4.0.0,<5.0.0
+
+# ─── 合成可行性打分工具（可选）──────────────────────────────────────────────
+# SA Score 由 RDKit 内置，无需单独安装
+
+# SCSCore（深度学习合成可行性评分）：
+#   pip install scscore
+# scscore>=1.2.0  # 按需解除注释
+
+# SYBA（贝叶斯合成可行性）：
+#   pip install syba
+# syba>=1.0.4  # 按需解除注释
+
+# RASCore（基于反应的合成可行性）：
+#   pip install rascore
+# rascore>=2.2.0  # 按需解除注释
+
+# ─── 开发/调试工具（可选）────────────────────────────────────────────────────
+# tqdm>=4.66.0,<5.0.0    # 进度条
+# ipython>=8.0.0         # 交互式调试
+# jupyter>=1.0.0         # Notebook 环境

@@ -44,6 +44,15 @@ CONFIG = {
     'output_npy':     'poly-all-fp.npy',
     'failed_record':  'failed_molecules.xlsx',
 
+    # ---- 皮尔逊相关性过滤（可选）----
+    # 设为 True 后，在描述符计算完成后自动进行共线性剔除
+    # 详细参数见 pearson_filter.py 的 CONFIG，此处只设核心开关和阈值
+    'pearson_filter':           False,   # True=启用，False=跳过
+    'pearson_threshold':        0.95,    # |r| 超过此值则剔除方差小的那列
+    'pearson_output_npy':       '',      # 留空：自动命名为 <output_npy基名>_pearson.npy
+    'pearson_report_xlsx':      '',      # 留空：自动命名为 pearson_removal_report.xlsx
+    'pearson_gen_heatmap':      True,    # 是否生成热图（维数 ≤ 300 时有效）
+
     # ---- 元素全集（1–4 周期常用）----
     # 若分子含更重的元素，需在此追加
     'global_species': [
@@ -536,4 +545,35 @@ if __name__ == '__main__':
     }
     np.save(CONFIG['output_npy'], save_dict, allow_pickle=True)
     print(f"结果已保存 → {CONFIG['output_npy']}")
+
+    # ── 皮尔逊相关性过滤（可选）────────────────────────────────────────
+    if CONFIG.get('pearson_filter', False):
+        print(f"\n[INFO] 启动皮尔逊相关性过滤（阈值 |r|>{CONFIG['pearson_threshold']}）...")
+        try:
+            # 导入同目录的 pearson_filter.py
+            _desc_dir = os.path.dirname(os.path.abspath(__file__))
+            import sys as _sys
+            if _desc_dir not in _sys.path:
+                _sys.path.insert(0, _desc_dir)
+            from pearson_filter import run_pearson_filter
+
+            _pf_cfg = {
+                'input_npy':        CONFIG['output_npy'],
+                'output_npy':       CONFIG.get('pearson_output_npy', ''),
+                'report_xlsx':      CONFIG.get('pearson_report_xlsx', ''),
+                'output_dir':       os.path.dirname(os.path.abspath(CONFIG['output_npy'])),
+                'threshold':        CONFIG.get('pearson_threshold', 0.95),
+                'descriptor_fields': [],   # 自动检测所有字段
+                'gen_heatmap':      CONFIG.get('pearson_gen_heatmap', True),
+                'heatmap_max_dim':  300,
+                'mode':             'filter',
+            }
+            pf_result = run_pearson_filter(_pf_cfg)
+            print(f"[INFO] 皮尔逊过滤完成：{pf_result['n_before']}维 → {pf_result['n_after']}维")
+            print(f"[INFO] 过滤后文件 → {pf_result['output_npy']}")
+        except Exception as _pf_e:
+            print(f"[WARN] 皮尔逊过滤执行失败: {_pf_e}")
+            import traceback as _tb
+            _tb.print_exc()
+
     print("全部计算完成！")

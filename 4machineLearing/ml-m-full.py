@@ -1,38 +1,63 @@
 #!/usr/bin/env python3
-# ml-m-full.py  —— 训练 + SHAP + 超参数优化 全合一
+# ml-m-full.py  —— 训练 + SHAP + 超参数优化 全合一（回归 + 分类双模式）
 # =============================================================================
 # ============================= 配置区域（只改这里）============================
 # =============================================================================
+
+# ---------- 任务类型 ----------
+# 'regression'    : 回归任务（标签为连续数值，如能量、溶解度）
+# 'classification': 分类任务（标签为整数类别，如 0/1/2/3 等）
+TASK_TYPE    = 'regression'
 
 # ---------- 数据配置 ----------
 CONFIG_TXT   = 'config-full-1.txt'   # 特征开关配置文件（npy_path、if_rdkit 等）
 
 # ---------- 启用/禁用模型 ----------
-# 设为 False 可跳过某个模型，减少训练时间；删除某行等同于 False
-MODEL_ENABLE = {
-    "LinearRegression":  True,
-    "Ridge":             True,
-    "LassoCV":           True,
-    "ElasticNetCV":      True,
-    "HuberRegressor":    True,   # 对异常值鲁棒的线性模型
-    "BayesianRidge":     True,   # 贝叶斯岭回归，自动估计正则强度
-    "DecisionTree":      True,
-    "RandomForest":      True,
-    "ExtraTreesRegressor": True, # 极端随机树，比 RF 更快
-    "GradientBoosting":  True,
-    "HistGBR":           True,   # 直方图梯度提升，大数据集首选
-    "AdaBoost":          True,   # 自适应提升
-    "BaggingRegressor":  True,   # 袋装集成
-    "SVR":               True,
-    "KNeighbors":        True,
-    "MLP":               True,
+# 回归模式（TASK_TYPE='regression'）使用 MODEL_ENABLE_REG
+# 分类模式（TASK_TYPE='classification'）使用 MODEL_ENABLE_CLF
+
+MODEL_ENABLE_REG = {
+    "LinearRegression":       True,
+    "Ridge":                  True,
+    "LassoCV":                True,
+    "ElasticNetCV":           True,
+    "HuberRegressor":         True,   # 对异常值鲁棒的线性模型
+    "BayesianRidge":          True,   # 贝叶斯岭回归
+    "DecisionTree":           True,
+    "RandomForest":           True,
+    "ExtraTreesRegressor":    True,   # 极端随机树
+    "GradientBoosting":       True,
+    "HistGBR":                True,   # 直方图梯度提升，大数据集首选
+    "AdaBoost":               True,
+    "BaggingRegressor":       True,
+    "SVR":                    True,
+    "KNeighbors":             True,
+    "MLP":                    True,
 }
 
-# ---------- 模型超参数 ----------
+MODEL_ENABLE_CLF = {
+    "LogisticRegression":     True,
+    "RidgeClassifier":        True,
+    "SVC":                    True,
+    "KNeighborsClassifier":   True,
+    "DecisionTreeClassifier": True,
+    "RandomForestClassifier": True,
+    "ExtraTreesClassifier":   True,
+    "GradientBoostingClassifier": True,
+    "HistGBClassifier":       True,
+    "AdaBoostClassifier":     True,
+    "MLPClassifier":          True,
+    "GaussianNB":             True,
+}
+
+# 向后兼容别名（由运行时自动选择，此处仅做占位，勿手动修改）
+MODEL_ENABLE = MODEL_ENABLE_REG
+
+# ---------- 回归模型超参数 ----------
 # key 格式：Pipeline 步骤名 "model__参数名"，直接传给 pipe.set_params()
 _ALPHA_SPACE = None   # None → 自动使用 np.logspace(-4, 1, 20)
 
-MODEL_PARAMS = {
+MODEL_PARAMS_REG = {
     "LinearRegression":    {},
     "Ridge":               {"model__alpha": 10.0},
     "LassoCV":             {"model__cv": 5, "model__alphas": _ALPHA_SPACE,
@@ -65,6 +90,36 @@ MODEL_PARAMS = {
                             "model__validation_fraction": 0.1, "model__n_iter_no_change": 20,
                             "model__tol": 1e-4,       "model__random_state": 42},
 }
+
+# ---------- 分类模型超参数 ----------
+MODEL_PARAMS_CLF = {
+    "LogisticRegression":      {"model__max_iter": 500, "model__random_state": 42,
+                                "model__solver": "lbfgs", "model__multi_class": "auto"},
+    "RidgeClassifier":         {"model__alpha": 1.0},
+    "SVC":                     {"model__kernel": "rbf", "model__C": 10,
+                                "model__gamma": "scale", "model__probability": True},
+    "KNeighborsClassifier":    {"model__n_neighbors": 5, "model__n_jobs": -1},
+    "DecisionTreeClassifier":  {"model__max_depth": 5, "model__random_state": 42},
+    "RandomForestClassifier":  {"model__n_estimators": 100, "model__max_depth": 5,
+                                "model__random_state": 42, "model__n_jobs": -1},
+    "ExtraTreesClassifier":    {"model__n_estimators": 100, "model__max_depth": 5,
+                                "model__random_state": 42, "model__n_jobs": -1},
+    "GradientBoostingClassifier": {"model__n_estimators": 100, "model__learning_rate": 0.1,
+                                   "model__max_depth": 3, "model__random_state": 42},
+    "HistGBClassifier":        {"model__max_iter": 200, "model__learning_rate": 0.1,
+                                "model__max_depth": 5, "model__random_state": 42},
+    "AdaBoostClassifier":      {"model__n_estimators": 100, "model__learning_rate": 0.1,
+                                "model__random_state": 42},
+    "MLPClassifier":           {"model__hidden_layer_sizes": (100,), "model__activation": "tanh",
+                                "model__solver": "adam", "model__learning_rate_init": 1e-3,
+                                "model__max_iter": 1000, "model__early_stopping": True,
+                                "model__validation_fraction": 0.1, "model__n_iter_no_change": 20,
+                                "model__tol": 1e-4, "model__random_state": 42},
+    "GaussianNB":              {},
+}
+
+# 向后兼容别名
+MODEL_PARAMS = MODEL_PARAMS_REG
 
 # ---------- 超参数优化（HPO）配置 ----------
 HPO_ENABLE   = False        # 总开关
@@ -199,6 +254,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import joblib
 import shap
+
+# ── 回归模型 ──────────────────────────────────────────────────────────────────
 from sklearn.linear_model import (LinearRegression, Ridge, LassoCV, ElasticNetCV,
                                    HuberRegressor, BayesianRidge)
 from sklearn.tree import DecisionTreeRegressor
@@ -209,10 +266,27 @@ from sklearn.ensemble import (RandomForestRegressor, GradientBoostingRegressor,
 from sklearn.svm import SVR
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.neural_network import MLPRegressor
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
-from sklearn.preprocessing import StandardScaler
+
+# ── 分类模型 ──────────────────────────────────────────────────────────────────
+from sklearn.linear_model import LogisticRegression, RidgeClassifier
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import (RandomForestClassifier, GradientBoostingClassifier,
+                               ExtraTreesClassifier, AdaBoostClassifier,
+                               HistGradientBoostingClassifier)
+from sklearn.neural_network import MLPClassifier
+from sklearn.naive_bayes import GaussianNB
+
+# ── 评估指标 ──────────────────────────────────────────────────────────────────
+from sklearn.metrics import (mean_squared_error, r2_score, mean_absolute_error,
+                              accuracy_score, f1_score, roc_auc_score,
+                              classification_report, confusion_matrix,
+                              ConfusionMatrixDisplay)
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import (train_test_split, GridSearchCV,
-                                     RandomizedSearchCV, cross_val_score)
+                                     RandomizedSearchCV, cross_val_score,
+                                     StratifiedKFold)
 from sklearn.pipeline import Pipeline
 
 # 公共工具（同目录）
@@ -262,7 +336,8 @@ print(f"[INFO] 特征矩阵: {X.shape}，有效样本: {(~y.isna()).sum()}")
 _alpha_space = np.logspace(-4, 1, 20)
 
 # 模型基础定义（需要 scaler 的模型加 scaler 步骤；树/集成模型不需要）
-_ALL_BASE_MODELS = {
+# ── 回归模型基础定义 ───────────────────────────────────────────────────────────
+_ALL_BASE_MODELS_REG = {
     "LinearRegression":    Pipeline([('scaler', StandardScaler()), ('model', LinearRegression())]),
     "Ridge":               Pipeline([('scaler', StandardScaler()), ('model', Ridge())]),
     "LassoCV":             Pipeline([('scaler', StandardScaler()), ('model', LassoCV())]),
@@ -281,14 +356,44 @@ _ALL_BASE_MODELS = {
     "MLP":                 Pipeline([('scaler', StandardScaler()), ('model', MLPRegressor())]),
 }
 
+# ── 分类模型基础定义 ───────────────────────────────────────────────────────────
+_ALL_BASE_MODELS_CLF = {
+    "LogisticRegression":      Pipeline([('scaler', StandardScaler()), ('model', LogisticRegression())]),
+    "RidgeClassifier":         Pipeline([('scaler', StandardScaler()), ('model', RidgeClassifier())]),
+    "SVC":                     Pipeline([('scaler', StandardScaler()), ('model', SVC())]),
+    "KNeighborsClassifier":    Pipeline([('scaler', StandardScaler()), ('model', KNeighborsClassifier())]),
+    "DecisionTreeClassifier":  Pipeline([('model', DecisionTreeClassifier())]),
+    "RandomForestClassifier":  Pipeline([('model', RandomForestClassifier())]),
+    "ExtraTreesClassifier":    Pipeline([('model', ExtraTreesClassifier())]),
+    "GradientBoostingClassifier": Pipeline([('model', GradientBoostingClassifier())]),
+    "HistGBClassifier":        Pipeline([('model', HistGradientBoostingClassifier())]),
+    "AdaBoostClassifier":      Pipeline([('model', AdaBoostClassifier())]),
+    "MLPClassifier":           Pipeline([('scaler', StandardScaler()), ('model', MLPClassifier())]),
+    "GaussianNB":              Pipeline([('scaler', StandardScaler()), ('model', GaussianNB())]),
+}
+
+# 向后兼容别名
+_ALL_BASE_MODELS = _ALL_BASE_MODELS_REG
+
+# ── 分类模型中支持 SHAP TreeExplainer 的模型集合 ─────────────────────────────
+SHAP_TREE_MODELS_CLF = {"DecisionTreeClassifier", "RandomForestClassifier",
+                         "ExtraTreesClassifier", "GradientBoostingClassifier",
+                         "HistGBClassifier"}
+
+
 def _build_models():
-    """按 MODEL_ENABLE 过滤，深拷贝并注入 MODEL_PARAMS。"""
+    """按当前任务类型和 MODEL_ENABLE 过滤，深拷贝并注入模型超参数。"""
+    _is_clf = (TASK_TYPE == 'classification')
+    base_map  = _ALL_BASE_MODELS_CLF  if _is_clf else _ALL_BASE_MODELS_REG
+    enable    = MODEL_ENABLE_CLF      if _is_clf else MODEL_ENABLE_REG
+    params_map = MODEL_PARAMS_CLF    if _is_clf else MODEL_PARAMS_REG
+
     models = {}
-    for name, base_pipe in _ALL_BASE_MODELS.items():
-        if not MODEL_ENABLE.get(name, True):
+    for name, base_pipe in base_map.items():
+        if not enable.get(name, True):
             continue
         pipe = copy.deepcopy(base_pipe)
-        params = MODEL_PARAMS.get(name, {})
+        params = params_map.get(name, {})
         resolved = {
             k: (_alpha_space if v is None and k == 'model__alphas' else v)
             for k, v in params.items()
@@ -535,9 +640,13 @@ def _write_model_card(pipe, name, metrics, seed, config, flags,
     lines += [
         "",
         "── 7. 测试集评估指标 (Test Set Metrics) ────────────────────────────",
+        f"  task_type   : {config.get('_task_type', 'regression')}",
     ]
     for metric, val in metrics.items():
-        lines.append(f"  {metric:8s}: {val:.6f}")
+        if isinstance(val, float) and not (val != val):   # not NaN
+            lines.append(f"  {metric:12s}: {val:.6f}")
+        else:
+            lines.append(f"  {metric:12s}: {val}")
     lines.append(f"  train_time  : {train_time_s:.2f} s")
 
     lines += [
@@ -671,9 +780,10 @@ def _run_hpo(pipe, name, X_tr, y_tr, seed):
     raise ValueError(f"HPO_METHOD='{HPO_METHOD}' 无效，应为 'grid'/'random'/'optuna'")
 
 # ── SHAP 分析 ──────────────────────────────────────────────────────────────────
-def _run_shap(pipe, name, X_bg, seed, shap_dir):
+def _run_shap(pipe, name, X_bg, seed, shap_dir, shap_tree_models=None):
     """对树模型做 SHAP 分析并保存图片，失败时打印警告不中断主流程。"""
-    if not SHAP_ENABLE or name not in SHAP_TREE_MODELS:
+    _tree_set = shap_tree_models if shap_tree_models is not None else SHAP_TREE_MODELS
+    if not SHAP_ENABLE or name not in _tree_set:
         return
     try:
         model_step = pipe.named_steps['model']

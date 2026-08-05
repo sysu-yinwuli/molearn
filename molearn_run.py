@@ -159,8 +159,20 @@ def _make_config_txt(cfg: dict, step_key: str, overrides: dict = None) -> str:
 
     npy_rel = _get(cfg, 'step6_train', 'input_npy') or ''
     if not npy_rel:
-        desc_dir  = _get(cfg, 'paths', 'descriptor_npy', default='data/descriptors')
-        desc_name = _get(cfg, 'step3_descriptor', 'output_name', default='dataset-fp.npy')
+        # 与 _resolve_input_npy 保持一致：优先使用 pearson 过滤后的 npy
+        _pearson_on = bool(_get(cfg, 'step3_descriptor', 'pearson_filter', default=False))
+        if _pearson_on:
+            desc_dir  = _get(cfg, 'paths', 'pearson_npy', default='data/pearson')
+            base_name = _get(cfg, 'step3_descriptor', 'output_name', default='dataset-fp.npy')
+            custom    = _get(cfg, 'step3_descriptor', 'pearson_output_npy', default='')
+            if custom:
+                desc_name = os.path.basename(custom)
+            else:
+                desc_name = base_name.replace('.npy', '_pearson.npy') if base_name.endswith('.npy') \
+                            else base_name + '_pearson.npy'
+        else:
+            desc_dir  = _get(cfg, 'paths', 'descriptor_npy', default='data/descriptors')
+            desc_name = _get(cfg, 'step3_descriptor', 'output_name', default='dataset-fp.npy')
         npy_rel   = os.path.join(desc_dir, desc_name)
 
     res_folder = os.path.join(
@@ -309,28 +321,45 @@ def _patch_script_config(script_rel: str, cfg: dict, step_key: str,
 def _resolve_input_npy(cfg: dict, step_key: str) -> str:
     """
     如果某步骤的 input_npy 为空，自动推断上一步的输出路径。
+    优先级规则：
+      - step3 : step1 处理输出 (data/processed/)
+      - step4/5/6 : 若 step3 开启了 pearson_filter，则用 pearson 过滤后 npy
+                    (data/pearson/)；否则用描述符 npy (data/descriptors/)
+      - step2/7/8/9 : 与 step4/5/6 相同的优先级逻辑
     """
     s = cfg.get(step_key, {})
-    npy = s.get('input_npy', '')
+    # 步骤内显式指定的 input_npy 最优先
+    npy = (s.get('input_npy', '')
+           or s.get('query_npy', '')
+           or s.get('predict_npy', ''))
     if npy:
         return os.path.join(_ROOT, npy)
 
     paths = cfg.get('paths', {})
 
-    if step_key in ('step2_analysis', 'step7_sa_score', 'step8_similarity', 'step9_predict'):
-        # 优先用 descriptor npy
-        d = paths.get('descriptor_npy', 'data/descriptors')
-        n = _get(cfg, 'step3_descriptor', 'output_name', default='dataset-fp.npy')
-        return os.path.join(_ROOT, d, n)
+    # ── step3: 使用 step1 的输出 ─────────────────────────────────────────
     if step_key == 'step3_descriptor':
         d = paths.get('processed_npy', 'data/processed')
         n = _get(cfg, 'step1_data', 'output_name', default='dataset.npy')
         return os.path.join(_ROOT, d, n)
-    if step_key in ('step4_sampling', 'step5_split', 'step6_train'):
-        d = paths.get('descriptor_npy', 'data/descriptors')
-        n = _get(cfg, 'step3_descriptor', 'output_name', default='dataset-fp.npy')
+
+    # ── step4/5/6/2/7/8/9: 优先 pearson 过滤后 npy ──────────────────────
+    _pearson_on = bool(_get(cfg, 'step3_descriptor', 'pearson_filter', default=False))
+    if _pearson_on:
+        d    = paths.get('pearson_npy', 'data/pearson')
+        base = _get(cfg, 'step3_descriptor', 'output_name', default='dataset-fp.npy')
+        # pearson_filter.py 的命名规则：<basename>_pearson.npy
+        n    = base.replace('.npy', '_pearson.npy') if base.endswith('.npy') else base + '_pearson.npy'
+        # 若用户手动指定了 pearson_output_npy，则用它
+        custom = _get(cfg, 'step3_descriptor', 'pearson_output_npy', default='')
+        if custom:
+            n = os.path.basename(custom)
         return os.path.join(_ROOT, d, n)
-    return ''
+
+    # ── 默认：descriptor npy ─────────────────────────────────────────────
+    d = paths.get('descriptor_npy', 'data/descriptors')
+    n = _get(cfg, 'step3_descriptor', 'output_name', default='dataset-fp.npy')
+    return os.path.join(_ROOT, d, n)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -374,10 +403,26 @@ def run_step(step_num: int, cfg: dict, overrides: dict, dry_run: bool) -> int:
             _ROOT, cfg.get('paths', {}).get('descriptor_npy', 'data/descriptors'))
         env['MOLEARN_OUTPUT_NAME'] = s.get('output_name', 'dataset-fp.npy')
         # ── 皮尔逊相关性筛选参数透传 ──────────────────────────────────────────
-        env['MOLEARN_PEARSON_FILTER']     = str(s.get('pearson_filter', False)).lower()
+        pearson_on = s.get('pearson_filter', False)
+        env['MOLEARN_PEARSON_FILTER']     = str(pearson_on).lower()
         env['MOLEARN_PEARSON_THRESHOLD']  = str(s.get('pearson_threshold', 0.95))
-        env['MOLEARN_PEARSON_OUTPUT_NPY'] = str(s.get('pearson_output_npy', '') or '')
-        env['MOLEARN_PEARSON_REPORT']     = str(s.get('pearson_report_xlsx', '') or '')
+        # 自动为 pearson 输出 npy 设置完整路径（保存到 paths.pearson_npy 目录）
+        p_out_npy = s.get('pearson_output_npy', '') or ''
+        if pearson_on and not p_out_npy:
+            _pearson_dir = os.path.join(
+                _ROOT, cfg.get('paths', {}).get('pearson_npy', 'data/pearson'))
+            _base_name   = s.get('output_name', 'dataset-fp.npy')
+            _pearson_name = _base_name.replace('.npy', '_pearson.npy') \
+                            if _base_name.endswith('.npy') else _base_name + '_pearson.npy'
+            p_out_npy    = os.path.join(_pearson_dir, _pearson_name)
+        env['MOLEARN_PEARSON_OUTPUT_NPY'] = p_out_npy
+        # pearson report xlsx 也放到 pearson 目录
+        p_report = s.get('pearson_report_xlsx', '') or ''
+        if pearson_on and not p_report:
+            _pearson_dir = os.path.join(
+                _ROOT, cfg.get('paths', {}).get('pearson_npy', 'data/pearson'))
+            p_report = os.path.join(_pearson_dir, 'pearson_removal_report.xlsx')
+        env['MOLEARN_PEARSON_REPORT']     = p_report
         env['MOLEARN_PEARSON_HEATMAP']    = str(s.get('pearson_gen_heatmap', True)).lower()
         env['MOLEARN_PEARSON_MAX_DIM']    = str(s.get('pearson_heatmap_max_dim', 300))
 
@@ -427,6 +472,8 @@ def run_step(step_num: int, cfg: dict, overrides: dict, dry_run: bool) -> int:
             seed0 = seeds
         env['MOLEARN_MODEL_DIR']  = os.path.join(model_dir, f"seed_{seed0}")
         env['MOLEARN_MODEL_NAME'] = s.get('model_name', 'GradientBoosting')
+        # 传递 task_type（auto=由 usemodel 自动检测）
+        env['MOLEARN_TASK_TYPE']  = s.get('task_type', 'auto')
 
     return _run_script(script, extra_env=env, dry_run=dry_run)
 

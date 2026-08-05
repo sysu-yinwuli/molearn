@@ -73,6 +73,18 @@ sys.path.insert(0, _HERE)
 
 from feature_utils import load_npy, load_config, resolve_path
 
+# =============================================================================
+# ── MOLEARN_ 环境变量覆盖（由 molearn_run.py 自动设置，单独运行时忽略）─────────
+# MOLEARN_INPUT_NPY  : 覆盖 INPUT_NPY
+# MOLEARN_OUTPUT_DIR : 覆盖 OUTPUT_DIR
+# =============================================================================
+_env_input  = os.environ.get('MOLEARN_INPUT_NPY', '').strip()
+_env_outdir = os.environ.get('MOLEARN_OUTPUT_DIR', '').strip()
+if _env_input:
+    INPUT_NPY  = _env_input
+if _env_outdir:
+    OUTPUT_DIR = _env_outdir
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 

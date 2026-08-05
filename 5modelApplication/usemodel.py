@@ -30,6 +30,32 @@ import numpy as np
 import pandas as pd
 import joblib
 
+# =============================================================================
+# ── MOLEARN_ 环境变量覆盖（由 molearn_run.py 自动设置，单独运行时忽略）─────────
+# MOLEARN_PREDICT_NPY : 覆盖 PREDICT_NPY
+# MOLEARN_MODEL_DIR   : 覆盖 MODEL_DIR
+# MOLEARN_MODEL_NAME  : 覆盖 MODEL_NAME
+# MOLEARN_OUTPUT_DIR  : 覆盖输出目录（OUTPUT_CSV 改为此目录下同名文件）
+# MOLEARN_TASK_TYPE   : 覆盖 TASK_TYPE
+# =============================================================================
+_env_predict   = os.environ.get('MOLEARN_PREDICT_NPY', '').strip()
+_env_model_dir = os.environ.get('MOLEARN_MODEL_DIR',   '').strip()
+_env_model_name= os.environ.get('MOLEARN_MODEL_NAME',  '').strip()
+_env_out_dir   = os.environ.get('MOLEARN_OUTPUT_DIR',  '').strip()
+_env_task_type = os.environ.get('MOLEARN_TASK_TYPE',   '').strip()
+
+if _env_predict:
+    PREDICT_NPY = _env_predict
+if _env_model_dir:
+    MODEL_DIR   = _env_model_dir
+if _env_model_name:
+    MODEL_NAME  = _env_model_name
+if _env_out_dir:
+    os.makedirs(_env_out_dir, exist_ok=True)
+    OUTPUT_CSV  = os.path.join(_env_out_dir, os.path.basename(OUTPUT_CSV))
+if _env_task_type:
+    TASK_TYPE   = _env_task_type
+
 # ── 公共工具（训练目录）────────────────────────────────────────────────────────
 _HERE   = os.path.dirname(os.path.abspath(__file__))
 _ML_DIR = os.path.normpath(os.path.join(_HERE, '..', '4machineLearing'))

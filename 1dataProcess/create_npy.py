@@ -69,8 +69,18 @@ def list_files_in_directory(directory):
 
 import pandas as pd
 
+# =============================================================================
+# ── MOLEARN_ 环境变量覆盖（由 molearn_run.py 自动设置，单独运行时忽略）─────────
+# MOLEARN_XLSX       : 覆盖配置 xlsx 路径
+# MOLEARN_OUTPUT_DIR : 覆盖所有 npy 输出目录（xlsx 中的 npy_path 改为此目录下同名文件）
+# =============================================================================
+_env_xlsx       = os.environ.get('MOLEARN_XLSX', '').strip()
+_env_output_dir = os.environ.get('MOLEARN_OUTPUT_DIR', '').strip()
+if _env_output_dir:
+    os.makedirs(_env_output_dir, exist_ok=True)
+
 # 读取 Excel 文件
-file_path = 'creat_npy.xlsx'  # 替换为你的文件路径
+file_path = _env_xlsx if _env_xlsx else 'creat_npy.xlsx'
 df = pd.read_excel(file_path)
 
 # 将每一行转换为字典，并将所有字典放入列表
@@ -87,6 +97,9 @@ for record in list_of_dicts:
     y_idx = int(record['y_idx'])
     flag_idx = int(record['flag_idx'])
     out_npy = record['npy_path']
+    # 若 MOLEARN_OUTPUT_DIR 已设置，将输出重定向到统一目录
+    if _env_output_dir:
+        out_npy = os.path.join(_env_output_dir, os.path.basename(out_npy))
 
 
     directory_path = xyz_folder  # 替换成你要处理的文件夹路径

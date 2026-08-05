@@ -32,15 +32,17 @@ paths:
   data_root:          "data"                      # 统一数据根目录
   raw_gjf:            "data/raw/gjf"              # 原始 .gjf 文件目录
   raw_xyz:            "data/raw/xyz"              # .xyz 文件目录（gjf2xyz 输出）
-  processed_npy:      "data/processed"            # create_npy 输出目录
-  descriptor_npy:     "data/descriptors"          # create_by_fp 输出目录
-  samples_dir:        "data/samples"              # sample_npy 输出目录
-  splits_dir:         "data/splits"               # dataset_split 输出目录
-  training_output:    "outputs/training"          # 训练输出根目录
-  analysis_output:    "outputs/analysis"          # 数据库分析输出目录
-  sa_score_output:    "outputs/sa_scores"         # 可合成性打分输出目录
-  similarity_output:  "outputs/similarity"        # 相似度搜索输出目录
-  prediction_output:  "outputs/predictions"       # 模型推理输出目录
+  raw_xlsx:           "data/raw/xlsx"             # 原始 Excel 配置/标签文件目录
+  processed_npy:      "data/processed"            # create_npy 输出目录（step1）
+  descriptor_npy:     "data/descriptors"          # create_by_fp 输出目录（step3）
+  pearson_npy:        "data/pearson"              # pearson_filter 过滤后 npy（step3+）
+  samples_dir:        "data/samples"              # sample_npy 输出目录（step4）
+  splits_dir:         "data/splits"               # dataset_split 输出目录（step5）
+  training_output:    "outputs/training"          # 训练输出根目录（step6）
+  analysis_output:    "outputs/analysis"          # 数据库分析输出目录（step2）
+  sa_score_output:    "outputs/sa_scores"         # 可合成性打分输出目录（step7）
+  similarity_output:  "outputs/similarity"        # 相似度搜索输出目录（step8）
+  prediction_output:  "outputs/predictions"       # 模型推理输出目录（step9）
 
 # ── Step 1: 数据预处理 (1dataProcess) ──────────────────────────────────────────
 step1_data:
@@ -274,6 +276,7 @@ step9_predict:
   model_dir:    ""                             # 留空则自动用 step6 最新训练输出
   model_name:   "GradientBoosting"            # 选用哪个模型
   use_dim_reduction: true
+  task_type:    "auto"                         # auto=自动检测 | regression | classification
 
 # ── 系统资源控制（batch_train.py 使用，单独训练时也生效）──────────────────────────
 resources:

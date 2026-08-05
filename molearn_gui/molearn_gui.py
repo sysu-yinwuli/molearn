@@ -151,10 +151,11 @@ def run_pipeline():
         if _run_status == 'running':
             return jsonify({'ok': False, 'msg': '已有任务在运行中，请等待完成。'}), 409
 
-        data     = request.get_json(force=True) or {}
-        steps    = data.get('steps', None)    # None = 所有 enabled 步骤
-        seeds    = data.get('seeds', None)
-        dry_run  = data.get('dry_run', False)
+        data      = request.get_json(force=True) or {}
+        steps     = data.get('steps', None)    # None = 所有 enabled 步骤
+        seeds     = data.get('seeds', None)
+        dry_run   = data.get('dry_run', False)
+        task_type = data.get('task_type', None)
 
         _run_log    = []
         _run_status = 'running'
@@ -167,6 +168,8 @@ def run_pipeline():
                 cmd += ['--step', str(steps)]
             if seeds:
                 cmd += ['--seed', str(seeds)]
+            if task_type:
+                cmd += ['--task-type', task_type]
             if dry_run:
                 cmd += ['--dry-run']
 
@@ -197,7 +200,7 @@ def run_pipeline():
                 _run_log.append(f"\n[GUI ERROR] {e}\n")
 
     threading.Thread(target=_target, daemon=True).start()
-    return jsonify({'ok': True, 'msg': '训练已启动，请在日志面板查看进度。'})
+    return jsonify({'ok': True, 'msg': '任务已启动，请在日志面板查看进度。'})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -266,15 +269,43 @@ def status():
 
 @app.route('/outputs')
 def list_outputs():
+    """列出 outputs/ 下所有输出目录的文件。"""
     cfg = _load_yaml()
+    paths = cfg.get('paths', {})
+    out_keys = [
+        ('训练结果',     paths.get('training_output',   'outputs/training')),
+        ('数据库分析',   paths.get('analysis_output',   'outputs/analysis')),
+        ('可合成性得分', paths.get('sa_score_output',   'outputs/sa_scores')),
+        ('相似度搜索',   paths.get('similarity_output', 'outputs/similarity')),
+        ('模型推理',     paths.get('prediction_output', 'outputs/predictions')),
+        ('Pearson报告',  paths.get('pearson_npy',       'data/pearson')),
+    ]
     results = {}
-    out_root = os.path.join(_ROOT, cfg.get('paths', {}).get('training_output', 'outputs/training'))
-    if os.path.isdir(out_root):
-        for dirpath, dirs, files in os.walk(out_root):
-            for fn in files:
-                rel = os.path.relpath(os.path.join(dirpath, fn), _ROOT)
-                results.setdefault(os.path.relpath(dirpath, out_root), []).append(fn)
+    for label, rel_dir in out_keys:
+        full = os.path.join(_ROOT, rel_dir)
+        if os.path.isdir(full):
+            for dirpath, _dirs, files in os.walk(full):
+                for fn in files:
+                    sub = os.path.relpath(dirpath, full)
+                    key = f"[{label}] {sub}" if sub != '.' else f"[{label}]"
+                    results.setdefault(key, []).append(
+                        {'name': fn, 'path': os.path.relpath(os.path.join(dirpath, fn), _ROOT)}
+                    )
     return jsonify(results)
+
+
+@app.route('/list_npy')
+def list_npy():
+    """列出 data/ 下所有 .npy 文件（供 GUI 选择输入文件）。"""
+    cfg   = _load_yaml()
+    data_root = os.path.join(_ROOT, cfg.get('paths', {}).get('data_root', 'data'))
+    files = []
+    if os.path.isdir(data_root):
+        for dirpath, _dirs, fnames in os.walk(data_root):
+            for fn in fnames:
+                if fn.endswith('.npy'):
+                    files.append(os.path.relpath(os.path.join(dirpath, fn), _ROOT))
+    return jsonify(sorted(files))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -283,16 +314,20 @@ def list_outputs():
 
 @app.route('/read_file')
 def read_file():
-    rel_path = request.args.get('path', '')
+    rel_path  = request.args.get('path', '')
     full_path = os.path.normpath(os.path.join(_ROOT, rel_path))
-    # 安全检查：只允许读 outputs/ 下的文件
-    if not full_path.startswith(_ROOT):
+    # 安全检查：只允许读项目根目录下的文件
+    if not full_path.startswith(os.path.normpath(_ROOT)):
         return jsonify({'ok': False, 'msg': '路径越界'}), 403
     if not os.path.isfile(full_path):
         return jsonify({'ok': False, 'msg': '文件不存在'})
+    # 二进制文件（图片/npy）不可读为文本
+    _ext = os.path.splitext(full_path)[1].lower()
+    if _ext in ('.npy', '.pkl', '.joblib', '.png', '.jpg', '.jpeg', '.gif'):
+        return jsonify({'ok': True, 'content': f'[二进制文件，不显示文本内容]  大小: {os.path.getsize(full_path)} bytes'})
     try:
         with open(full_path, 'r', encoding='utf-8', errors='replace') as f:
-            content = f.read()
+            content = f.read(1024 * 512)   # 最大 512 KB
         return jsonify({'ok': True, 'content': content})
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)})

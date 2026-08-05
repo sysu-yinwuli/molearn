@@ -14,13 +14,13 @@ a{color:#4a7fb5;text-decoration:none}
 .topbar{background:linear-gradient(135deg,#1a3a5c,#2e6da4);color:#fff;padding:14px 28px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .topbar h1{font-size:1.35rem;font-weight:700;letter-spacing:.5px}
 .topbar .badge{background:rgba(255,255,255,.18);border-radius:12px;padding:2px 10px;font-size:.78rem}
-.container{display:grid;grid-template-columns:260px 1fr;gap:0;min-height:calc(100vh - 52px)}
+.container{display:grid;grid-template-columns:265px 1fr;gap:0;min-height:calc(100vh - 52px)}
 
 /* ── Sidebar ── */
-.sidebar{background:#1e2d40;color:#c8d8e8;padding:16px 0}
+.sidebar{background:#1e2d40;color:#c8d8e8;padding:16px 0;overflow-y:auto;max-height:calc(100vh - 52px)}
 .sidebar-section{margin-bottom:4px}
 .sidebar-section h3{padding:8px 18px;font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:#7a9bbe;font-weight:600}
-.sidebar a{display:flex;align-items:center;gap:8px;padding:9px 18px;color:#c8d8e8;font-size:.88rem;transition:background .15s}
+.sidebar a{display:flex;align-items:center;gap:8px;padding:9px 18px;color:#c8d8e8;font-size:.88rem;transition:background .15s;cursor:pointer}
 .sidebar a:hover,.sidebar a.active{background:#2e4a6a;color:#fff}
 .sidebar a .icon{width:18px;text-align:center;font-size:1rem}
 
@@ -31,9 +31,10 @@ a{color:#4a7fb5;text-decoration:none}
 
 /* ── Cards ── */
 .card{background:#fff;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:20px;overflow:hidden}
-.card-header{background:#f6f8fb;padding:12px 20px;border-bottom:1px solid #e5eaf0;display:flex;align-items:center;justify-content:space-between}
+.card-header{background:#f6f8fb;padding:12px 20px;border-bottom:1px solid #e5eaf0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .card-header h2{font-size:1rem;font-weight:600;color:#1a3a5c}
 .card-body{padding:18px 20px}
+.section-title{font-size:.85rem;font-weight:700;color:#1a3a5c;margin:14px 0 8px;border-bottom:1px solid #e5eaf0;padding-bottom:4px}
 
 /* ── Form ── */
 .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px 20px}
@@ -43,6 +44,7 @@ a{color:#4a7fb5;text-decoration:none}
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#4a7fb5;box-shadow:0 0 0 2px rgba(74,127,181,.12)}
 .form-group textarea{resize:vertical;min-height:60px}
 .hint{font-size:.75rem;color:#888;margin-top:2px}
+.form-full{grid-column:1/-1}
 
 /* ── Toggles / badges ── */
 .toggle-row{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0}
@@ -61,6 +63,7 @@ a{color:#4a7fb5;text-decoration:none}
 .btn-info   {background:#17a2b8;color:#fff} .btn-info:hover{background:#138496}
 .btn-warn   {background:#e6a817;color:#fff} .btn-warn:hover{background:#cc8800}
 .btn-light  {background:#e9ecef;color:#333} .btn-light:hover{background:#dee2e6}
+.btn-purple {background:#6f42c1;color:#fff} .btn-purple:hover{background:#5a32a3}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
 
@@ -98,19 +101,25 @@ input:checked + .slider{background:#2e6da4}
 input:checked + .slider:before{transform:translateX(18px)}
 
 /* ── Output browser ── */
-.file-tree{font-size:.83rem}
+.file-tree{font-size:.83rem;border-right:1px solid #e5eaf0;padding-right:12px}
 .file-group{margin-bottom:12px}
-.file-group h4{color:#1a3a5c;margin-bottom:4px;font-size:.85rem}
-.file-link{display:block;padding:3px 10px;color:#4a7fb5;cursor:pointer}
-.file-link:hover{background:#f0f5ff;border-radius:4px}
-.file-content{background:#f6f8fb;border:1px solid #e0e5ec;border-radius:6px;padding:12px;font-size:.8rem;white-space:pre-wrap;max-height:400px;overflow-y:auto;font-family:monospace}
+.file-group h4{color:#1a3a5c;margin-bottom:4px;font-size:.85rem;padding:4px 8px;background:#f0f5ff;border-radius:4px}
+.file-link{display:block;padding:3px 10px;color:#4a7fb5;cursor:pointer;border-radius:4px}
+.file-link:hover{background:#f0f5ff}
+.file-content{background:#f6f8fb;border:1px solid #e0e5ec;border-radius:6px;padding:12px;font-size:.8rem;white-space:pre-wrap;max-height:450px;overflow-y:auto;font-family:monospace}
 
 /* ── Tabs ── */
-.tabs{display:flex;gap:2px;border-bottom:2px solid #e5eaf0;margin-bottom:16px}
+.tabs{display:flex;gap:2px;border-bottom:2px solid #e5eaf0;margin-bottom:16px;flex-wrap:wrap}
 .tab{padding:8px 16px;cursor:pointer;font-size:.88rem;border-radius:6px 6px 0 0;border:1px solid transparent;margin-bottom:-2px}
 .tab.active{background:#fff;border-color:#e5eaf0 #e5eaf0 #fff;color:#2e6da4;font-weight:600}
 .tab:hover:not(.active){background:#f6f8fb}
 .tab-panel{display:none} .tab-panel.active{display:block}
+
+/* ── Alert / Note ── */
+.alert{padding:10px 14px;border-radius:6px;font-size:.85rem;margin-bottom:12px}
+.alert-info{background:#e8f4fd;border-left:4px solid #4a7fb5;color:#1a3a5c}
+.alert-warn{background:#fff3cd;border-left:4px solid #e6a817;color:#856404}
+.alert-success{background:#d4edda;border-left:4px solid #28a745;color:#155724}
 
 /* ── Responsive ── */
 @media(max-width:768px){
@@ -134,22 +143,39 @@ input:checked + .slider:before{transform:translateX(18px)}
 <!-- ── Sidebar ── -->
 <nav class="sidebar">
   <div class="sidebar-section">
-    <h3>导航</h3>
-    <a href="#" class="active" onclick="showPanel('panel-dashboard',this)"><span class="icon">🏠</span>总览</a>
+    <h3>总览 & 运行</h3>
+    <a href="#" class="active" onclick="showPanel('panel-dashboard',this)"><span class="icon">🏠</span>总览 & 快速启动</a>
     <a href="#" onclick="showPanel('panel-steps',this)"><span class="icon">⚙️</span>流水线步骤</a>
-    <a href="#" onclick="showPanel('panel-train',this)"><span class="icon">🚀</span>启动训练</a>
     <a href="#" onclick="showPanel('panel-outputs',this)"><span class="icon">📂</span>结果浏览</a>
   </div>
   <div class="sidebar-section">
-    <h3>配置</h3>
+    <h3>数据配置</h3>
     <a href="#" onclick="showPanel('panel-project',this)"><span class="icon">📋</span>项目信息</a>
     <a href="#" onclick="showPanel('panel-paths',this)"><span class="icon">📁</span>目录设置</a>
-    <a href="#" onclick="showPanel('panel-data',this)"><span class="icon">📊</span>数据配置</a>
-    <a href="#" onclick="showPanel('panel-descriptor',this)"><span class="icon">🔬</span>描述符</a>
-    <a href="#" onclick="showPanel('panel-models',this)"><span class="icon">🤖</span>模型选择</a>
-    <a href="#" onclick="showPanel('panel-features',this)"><span class="icon">🎛️</span>特征开关</a>
-    <a href="#" onclick="showPanel('panel-hpo',this)"><span class="icon">🔍</span>超参数优化</a>
+    <a href="#" onclick="showPanel('panel-step1',this)"><span class="icon">1️⃣</span>Step 1 数据预处理</a>
+    <a href="#" onclick="showPanel('panel-step2',this)"><span class="icon">2️⃣</span>Step 2 数据库分析</a>
+  </div>
+  <div class="sidebar-section">
+    <h3>描述符 & 特征</h3>
+    <a href="#" onclick="showPanel('panel-step3',this)"><span class="icon">🔬</span>Step 3 描述符计算</a>
+    <a href="#" onclick="showPanel('panel-step4',this)"><span class="icon">4️⃣</span>Step 4 数据抽样</a>
+    <a href="#" onclick="showPanel('panel-step5',this)"><span class="icon">5️⃣</span>Step 5 数据集划分</a>
+  </div>
+  <div class="sidebar-section">
+    <h3>模型训练</h3>
+    <a href="#" onclick="showPanel('panel-step6',this)"><span class="icon">🤖</span>Step 6 模型训练</a>
+    <a href="#" onclick="showPanel('panel-hpo',this)"><span class="icon">🔍</span>HPO & SHAP</a>
     <a href="#" onclick="showPanel('panel-dimred',this)"><span class="icon">📉</span>降维</a>
+    <a href="#" onclick="showPanel('panel-features',this)"><span class="icon">🎛️</span>特征开关</a>
+  </div>
+  <div class="sidebar-section">
+    <h3>分析 & 推理</h3>
+    <a href="#" onclick="showPanel('panel-step7',this)"><span class="icon">🧪</span>Step 7 可合成性打分</a>
+    <a href="#" onclick="showPanel('panel-step8',this)"><span class="icon">🔎</span>Step 8 相似度搜索</a>
+    <a href="#" onclick="showPanel('panel-step9',this)"><span class="icon">🚀</span>Step 9 模型推理</a>
+  </div>
+  <div class="sidebar-section">
+    <h3>系统</h3>
     <a href="#" onclick="showPanel('panel-resources',this)"><span class="icon">💻</span>系统资源</a>
   </div>
 </nav>
@@ -169,14 +195,10 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="card-body">
       <p style="color:#555;margin-bottom:12px">当前配置文件：<code>molearn.yaml</code></p>
       <div class="form-grid">
-        <div class="form-group">
-          <label>项目名称</label>
-          <input id="dash-name" type="text" readonly style="background:#f6f8fb">
-        </div>
-        <div class="form-group">
-          <label>描述</label>
-          <input id="dash-desc" type="text" readonly style="background:#f6f8fb">
-        </div>
+        <div class="form-group"><label>项目名称</label><input id="dash-name" type="text" readonly style="background:#f6f8fb"></div>
+        <div class="form-group"><label>描述</label><input id="dash-desc" type="text" readonly style="background:#f6f8fb"></div>
+        <div class="form-group"><label>版本</label><input id="dash-ver" type="text" readonly style="background:#f6f8fb"></div>
+        <div class="form-group"><label>作者</label><input id="dash-author" type="text" readonly style="background:#f6f8fb"></div>
       </div>
     </div>
   </div>
@@ -184,12 +206,20 @@ input:checked + .slider:before{transform:translateX(18px)}
   <div class="card">
     <div class="card-header"><h2>🚀 快速启动</h2></div>
     <div class="card-body">
-      <p style="color:#555;margin-bottom:14px">仅运行 <strong>molearn.yaml 中 enabled=true</strong> 的步骤。可在"流水线步骤"面板中分别开关各步骤。</p>
+      <div class="alert alert-info" style="margin-bottom:14px">
+        仅运行 <strong>molearn.yaml 中 enabled=true</strong> 的步骤。可在"流水线步骤"面板中分别开关各步骤，或点击各步骤配置面板中的"单独运行"按钮。
+      </div>
       <div class="btn-row">
         <button class="btn btn-success" onclick="startRun(null)">▶ 启动所有已启用步骤</button>
-        <button class="btn btn-warn" onclick="startRun('6')">⚡ 仅训练（Step 6）</button>
-        <button class="btn btn-info" onclick="startRun('3')">🔬 仅描述符计算（Step 3）</button>
+        <button class="btn btn-warn" onclick="startRun('1-3')">📊 Step 1→3 数据→描述符</button>
+        <button class="btn btn-warn" onclick="startRun('6')">⚡ 仅 Step 6 模型训练</button>
+        <button class="btn btn-info" onclick="startRun('3')">🔬 仅 Step 3 描述符计算</button>
+        <button class="btn btn-info" onclick="startRun('9')">🎯 仅 Step 9 模型推理</button>
         <button class="btn btn-danger" id="btn-stop" onclick="stopRun()" disabled>⏹ 停止</button>
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn btn-light" onclick="startRun(null,true)">👁 预演（--dry-run）</button>
+        <button class="btn btn-light" onclick="initDirs()">📂 初始化目录结构</button>
       </div>
     </div>
   </div>
@@ -210,50 +240,17 @@ input:checked + .slider:before{transform:translateX(18px)}
   <div class="card">
     <div class="card-header">
       <h2>⚙️ 流水线步骤开关</h2>
-      <button class="btn btn-primary" onclick="saveStepToggles()">💾 保存</button>
+      <button class="btn btn-primary" onclick="saveStepToggles()">💾 保存所有开关</button>
     </div>
     <div class="card-body">
-      <p style="color:#666;margin-bottom:14px;font-size:.88rem">
-        开启的步骤将在"启动所有已启用步骤"时依次执行。也可单独启动某步骤。
-      </p>
+      <div class="alert alert-info" style="margin-bottom:14px">
+        开启的步骤将在"启动所有已启用步骤"时依次执行。各步骤的详细参数请点击左侧对应菜单配置。
+      </div>
       <div class="step-list" id="step-list"></div>
       <div class="btn-row" style="margin-top:16px">
         <button class="btn btn-success" id="btn-run-selected" onclick="runSelectedSteps()">▶ 运行勾选步骤</button>
         <button class="btn btn-danger" onclick="stopRun()">⏹ 停止</button>
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- ════════════════════════════ TRAIN ════════════════════════════════ -->
-<div class="panel" id="panel-train">
-  <div class="card">
-    <div class="card-header"><h2>🚀 启动训练（Step 6）</h2></div>
-    <div class="card-body">
-      <div class="form-grid">
-        <div class="form-group">
-          <label>随机种子（逗号分隔）</label>
-          <input id="train-seeds" type="text" value="42" placeholder="42 或 42,123,456">
-        </div>
-        <div class="form-group">
-          <label>预演模式（不实际执行）</label>
-          <select id="train-dry">
-            <option value="false">否（正常运行）</option>
-            <option value="true">是（仅打印命令）</option>
-          </select>
-        </div>
-      </div>
-      <div class="btn-row">
-        <button class="btn btn-success" onclick="startTrainOnly()">▶ 开始训练</button>
-        <button class="btn btn-danger" onclick="stopRun()">⏹ 停止</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header"><h2>📋 训练日志</h2></div>
-    <div class="card-body" style="padding:0">
-      <div class="log-box" id="log-box-train">等待任务启动...</div>
     </div>
   </div>
 </div>
@@ -266,7 +263,7 @@ input:checked + .slider:before{transform:translateX(18px)}
       <button class="btn btn-info" onclick="loadOutputs()">🔄 刷新</button>
     </div>
     <div class="card-body">
-      <div style="display:grid;grid-template-columns:220px 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:240px 1fr;gap:16px">
         <div class="file-tree" id="file-tree">（点击"刷新"加载）</div>
         <div>
           <div id="file-path" style="font-size:.8rem;color:#888;margin-bottom:8px"></div>
@@ -289,7 +286,7 @@ input:checked + .slider:before{transform:translateX(18px)}
         <div class="form-group">
           <label>项目名称 (name)</label>
           <input id="project.name" type="text" placeholder="my_molearn_project">
-          <span class="hint">用于输出目录命名</span>
+          <span class="hint">用于训练输出目录命名（outputs/training/&lt;name&gt;）</span>
         </div>
         <div class="form-group">
           <label>描述 (description)</label>
@@ -312,169 +309,190 @@ input:checked + .slider:before{transform:translateX(18px)}
 <div class="panel" id="panel-paths">
   <div class="card">
     <div class="card-header">
-      <h2>📁 目录路径</h2>
-      <div class="btn-row" style="margin:0;gap:8px">
+      <h2>📁 统一数据目录</h2>
+      <div style="display:flex;gap:8px">
         <button class="btn btn-info" onclick="initDirs()">📂 创建所有目录</button>
         <button class="btn btn-primary" onclick="saveSection('paths')">💾 保存</button>
       </div>
     </div>
     <div class="card-body">
+      <div class="alert alert-info" style="margin-bottom:14px">
+        所有步骤的数据输入/输出均通过此处配置的路径管理，路径相对于项目根目录。
+      </div>
+      <div class="section-title">原始数据（输入）</div>
       <div class="form-grid">
-        <div class="form-group"><label>数据根目录 (data_root)</label><input id="paths.data_root" type="text"></div>
-        <div class="form-group"><label>原始 .gjf 目录</label><input id="paths.raw_gjf" type="text"></div>
-        <div class="form-group"><label>原始 .xyz 目录</label><input id="paths.raw_xyz" type="text"></div>
-        <div class="form-group"><label>预处理 npy 目录</label><input id="paths.processed_npy" type="text"></div>
-        <div class="form-group"><label>描述符 npy 目录</label><input id="paths.descriptor_npy" type="text"></div>
-        <div class="form-group"><label>抽样子集目录</label><input id="paths.samples_dir" type="text"></div>
-        <div class="form-group"><label>数据集划分目录</label><input id="paths.splits_dir" type="text"></div>
-        <div class="form-group"><label>训练输出目录</label><input id="paths.training_output" type="text"></div>
-        <div class="form-group"><label>分析输出目录</label><input id="paths.analysis_output" type="text"></div>
-        <div class="form-group"><label>可合成性得分目录</label><input id="paths.sa_score_output" type="text"></div>
-        <div class="form-group"><label>相似度搜索目录</label><input id="paths.similarity_output" type="text"></div>
-        <div class="form-group"><label>模型推理输出目录</label><input id="paths.prediction_output" type="text"></div>
+        <div class="form-group"><label>data_root — 统一数据根目录</label><input id="paths.data_root" type="text"></div>
+        <div class="form-group"><label>raw_gjf — 原始 .gjf 文件目录</label><input id="paths.raw_gjf" type="text"></div>
+        <div class="form-group"><label>raw_xyz — .xyz 文件目录</label><input id="paths.raw_xyz" type="text"></div>
+        <div class="form-group"><label>raw_xlsx — Excel 配置/标签文件目录</label><input id="paths.raw_xlsx" type="text"></div>
+      </div>
+      <div class="section-title">处理中间数据</div>
+      <div class="form-grid">
+        <div class="form-group"><label>processed_npy — Step1 输出（create_npy）</label><input id="paths.processed_npy" type="text"></div>
+        <div class="form-group"><label>descriptor_npy — Step3 输出（create_by_fp）</label><input id="paths.descriptor_npy" type="text"></div>
+        <div class="form-group"><label>pearson_npy — Step3+ Pearson 过滤后输出</label><input id="paths.pearson_npy" type="text"></div>
+        <div class="form-group"><label>samples_dir — Step4 输出（sample_npy）</label><input id="paths.samples_dir" type="text"></div>
+        <div class="form-group"><label>splits_dir — Step5 输出（dataset_split）</label><input id="paths.splits_dir" type="text"></div>
+      </div>
+      <div class="section-title">结果输出</div>
+      <div class="form-grid">
+        <div class="form-group"><label>training_output — Step6 训练结果</label><input id="paths.training_output" type="text"></div>
+        <div class="form-group"><label>analysis_output — Step2 数据库分析</label><input id="paths.analysis_output" type="text"></div>
+        <div class="form-group"><label>sa_score_output — Step7 可合成性得分</label><input id="paths.sa_score_output" type="text"></div>
+        <div class="form-group"><label>similarity_output — Step8 相似度搜索</label><input id="paths.similarity_output" type="text"></div>
+        <div class="form-group"><label>prediction_output — Step9 模型推理</label><input id="paths.prediction_output" type="text"></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ════════════════════════════ DATA ════════════════════════════════ -->
-<div class="panel" id="panel-data">
+<!-- ════════════════════════════ STEP 1 ══════════════════════════════ -->
+<div class="panel" id="panel-step1">
   <div class="card">
     <div class="card-header">
-      <h2>📊 数据配置</h2>
-      <button class="btn btn-primary" onclick="saveSection('step1_data,step4_sampling,step5_split')">💾 保存</button>
+      <h2>1️⃣ Step 1 — 数据预处理（create_npy.py）</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-info" onclick="startRun('1')">▶ 单独运行</button>
+        <button class="btn btn-primary" onclick="saveSection('step1_data')">💾 保存</button>
+      </div>
     </div>
     <div class="card-body">
-      <div class="tabs">
-        <div class="tab active" onclick="showTab(this,'tab-step1')">Step 1 数据预处理</div>
-        <div class="tab" onclick="showTab(this,'tab-step4')">Step 4 数据抽样</div>
-        <div class="tab" onclick="showTab(this,'tab-step5')">Step 5 数据集划分</div>
+      <div class="alert alert-info">
+        从 .xyz 文件目录 + Excel 标签文件生成分子数据 .npy。输出到 <code>paths.processed_npy</code>。
       </div>
-
-      <div class="tab-panel active" id="tab-step1">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>启用 (enabled)</label>
-            <select id="step1_data.enabled"><option value="true">是</option><option value="false">否</option></select>
-          </div>
-          <div class="form-group">
-            <label>配置表 xlsx_config</label>
-            <input id="step1_data.xlsx_config" type="text">
-          </div>
-          <div class="form-group">
-            <label>标签 Excel label_xlsx</label>
-            <input id="step1_data.label_xlsx" type="text">
-          </div>
-          <div class="form-group">
-            <label>分子名列 (key_col, 0-based)</label>
-            <input id="step1_data.key_col" type="number" value="0">
-          </div>
-          <div class="form-group">
-            <label>y 值列 (y_col)</label>
-            <input id="step1_data.y_col" type="number" value="3">
-          </div>
-          <div class="form-group">
-            <label>输出文件名 (output_name)</label>
-            <input id="step1_data.output_name" type="text" value="dataset.npy">
-          </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>启用 (enabled)</label>
+          <select id="step1_data.enabled"><option value="true">是</option><option value="false">否</option></select>
         </div>
-      </div>
-
-      <div class="tab-panel" id="tab-step4">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>启用 (enabled)</label>
-            <select id="step4_sampling.enabled"><option value="false">否</option><option value="true">是</option></select>
-          </div>
-          <div class="form-group">
-            <label>抽样数量 (sample_size)</label>
-            <input id="step4_sampling.sample_size" type="number" value="100">
-          </div>
-          <div class="form-group">
-            <label>随机种子 (seeds，逗号分隔)</label>
-            <input id="step4_sampling.seeds" type="text" value="42,123,456">
-          </div>
+        <div class="form-group">
+          <label>配置表 xlsx_config</label>
+          <input id="step1_data.xlsx_config" type="text" placeholder="data/raw/creat_npy.xlsx">
+          <span class="hint">create_npy.py 读取的配置 xlsx（含 xyz_path/xlsx_file/npy_path 列）</span>
         </div>
-        <div style="margin-top:12px">
-          <label style="font-size:.82rem;font-weight:600;color:#556">抽样方法</label>
-          <div class="toggle-row" style="margin-top:6px">
-            <label class="toggle-label"><input type="checkbox" id="step4_sampling.run_random" checked><span class="dot"></span>随机</label>
-            <label class="toggle-label"><input type="checkbox" id="step4_sampling.run_systematic" checked><span class="dot"></span>系统</label>
-            <label class="toggle-label"><input type="checkbox" id="step4_sampling.run_stratified" checked><span class="dot"></span>分层</label>
-            <label class="toggle-label"><input type="checkbox" id="step4_sampling.run_lhs" checked><span class="dot"></span>LHS</label>
-            <label class="toggle-label"><input type="checkbox" id="step4_sampling.run_diversity" checked><span class="dot"></span>MaxMin多样性</label>
-          </div>
+        <div class="form-group">
+          <label>标签 Excel (label_xlsx)</label>
+          <input id="step1_data.label_xlsx" type="text" placeholder="data/raw/project-1.xlsx">
+          <span class="hint">分子名 + 属性值 Excel</span>
         </div>
-      </div>
-
-      <div class="tab-panel" id="tab-step5">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>启用 (enabled)</label>
-            <select id="step5_split.enabled"><option value="false">否</option><option value="true">是</option></select>
-          </div>
-          <div class="form-group">
-            <label>划分方式 (method)</label>
-            <select id="step5_split.method">
-              <option value="random">random（全随机）</option>
-              <option value="stratified">stratified（分层）</option>
-              <option value="scaffold">scaffold（骨架）</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>训练集比例</label>
-            <input id="step5_split.train_ratio" type="number" step="0.05" value="0.8">
-          </div>
-          <div class="form-group">
-            <label>验证集比例</label>
-            <input id="step5_split.valid_ratio" type="number" step="0.05" value="0.1">
-          </div>
-          <div class="form-group">
-            <label>测试集比例</label>
-            <input id="step5_split.test_ratio" type="number" step="0.05" value="0.1">
-          </div>
-          <div class="form-group">
-            <label>骨架类型 (scaffold_type)</label>
-            <select id="step5_split.scaffold_type">
-              <option value="bemis_murcko">bemis_murcko</option>
-              <option value="murcko_generic">murcko_generic</option>
-              <option value="morgan">morgan（指纹聚类）</option>
-              <option value="maccs">maccs（指纹聚类）</option>
-              <option value="rdkit">rdkit（指纹聚类）</option>
-            </select>
-          </div>
+        <div class="form-group">
+          <label>分子名列 (key_col, 0-based)</label>
+          <input id="step1_data.key_col" type="number" value="0">
+        </div>
+        <div class="form-group">
+          <label>y 值列 (y_col)</label>
+          <input id="step1_data.y_col" type="number" value="3">
+        </div>
+        <div class="form-group">
+          <label>使用标志列 (flag_col)</label>
+          <input id="step1_data.flag_col" type="number" value="5">
+          <span class="hint">0=跳过该分子</span>
+        </div>
+        <div class="form-group">
+          <label>输出文件名 (output_name)</label>
+          <input id="step1_data.output_name" type="text" value="dataset.npy">
+          <span class="hint">保存到 paths.processed_npy 目录</span>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ════════════════════════════ DESCRIPTOR ══════════════════════════ -->
-<div class="panel" id="panel-descriptor">
+<!-- ════════════════════════════ STEP 2 ══════════════════════════════ -->
+<div class="panel" id="panel-step2">
   <div class="card">
     <div class="card-header">
-      <h2>🔬 描述符计算（Step 3）</h2>
-      <button class="btn btn-primary" onclick="saveSection('step3_descriptor')">💾 保存</button>
+      <h2>2️⃣ Step 2 — 数据库分析（db_analysis.py）</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-info" onclick="startRun('2')">▶ 单独运行</button>
+        <button class="btn btn-primary" onclick="saveSection('step2_analysis')">💾 保存</button>
+      </div>
     </div>
     <div class="card-body">
+      <div class="alert alert-info">
+        对分子数据库进行可视化分析：Y 属性分布、PCA/t-SNE 散点图、官能团统计、指纹多样性等。输出到 <code>paths.analysis_output</code>。
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>启用 (enabled)</label>
+          <select id="step2_analysis.enabled"><option value="false">否</option><option value="true">是</option></select>
+        </div>
+        <div class="form-group">
+          <label>输入 npy（留空=自动推断）</label>
+          <input id="step2_analysis.input_npy" type="text" placeholder="留空=自动用 step3 描述符输出">
+        </div>
+        <div class="form-group">
+          <label>Y 轴标签 (y_label)</label>
+          <input id="step2_analysis.y_label" type="text" value="Property">
+        </div>
+        <div class="form-group">
+          <label>降维用描述符字段</label>
+          <input id="step2_analysis.dim_feature" type="text" value="morgan_descriptor">
+          <span class="hint">用于 PCA/t-SNE/UMAP 散点图的字段名</span>
+        </div>
+        <div class="form-group">
+          <label>多样性指纹类型</label>
+          <select id="step2_analysis.diversity_fp">
+            <option value="morgan">Morgan</option>
+            <option value="maccs">MACCS</option>
+            <option value="rdkit">RDKit</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>多样性分析采样数</label>
+          <input id="step2_analysis.diversity_sample" type="number" value="500">
+        </div>
+      </div>
+      <div class="section-title">分析模块开关</div>
+      <div class="toggle-row">
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step2_analysis.run_y_dist" checked><span class="dot"></span>Y属性分布</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step2_analysis.run_correlation" checked><span class="dot"></span>相关性热图</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step2_analysis.run_dim_scatter" checked><span class="dot"></span>PCA/t-SNE散点图</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step2_analysis.run_func_group" checked><span class="dot"></span>官能团分析</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step2_analysis.run_diversity" checked><span class="dot"></span>Tanimoto多样性</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step2_analysis.run_morgan_bits" checked><span class="dot"></span>Morgan位频率</label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════ STEP 3 ══════════════════════════════ -->
+<div class="panel" id="panel-step3">
+  <div class="card">
+    <div class="card-header">
+      <h2>🔬 Step 3 — 描述符计算（create_by_fp.py）</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-info" onclick="startRun('3')">▶ 单独运行</button>
+        <button class="btn btn-primary" onclick="saveSection('step3_descriptor')">💾 保存</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-info">
+        从分子 .npy 计算多类型分子描述符，输出到 <code>paths.descriptor_npy</code>。启用 Pearson 过滤后再输出到 <code>paths.pearson_npy</code>。
+      </div>
       <div class="form-grid" style="margin-bottom:14px">
         <div class="form-group">
           <label>启用 (enabled)</label>
           <select id="step3_descriptor.enabled"><option value="true">是</option><option value="false">否</option></select>
         </div>
         <div class="form-group">
-          <label>输出文件名</label>
+          <label>输入 npy（留空=自动推断）</label>
+          <input id="step3_descriptor.input_npy" type="text" placeholder="留空=自动用 step1 输出">
+        </div>
+        <div class="form-group">
+          <label>输出文件名 (output_name)</label>
           <input id="step3_descriptor.output_name" type="text" value="dataset-fp.npy">
+          <span class="hint">保存到 paths.descriptor_npy</span>
         </div>
         <div class="form-group">
           <label>元素集 (global_species)</label>
           <input id="step3_descriptor.global_species" type="text" value="H,C,N,O,F,S,Cl">
-          <span class="hint">逗号分隔</span>
+          <span class="hint">逗号分隔（SOAP/ACSF/MBTR 需要）</span>
         </div>
       </div>
 
-      <label style="font-size:.82rem;font-weight:600;color:#556">描述符类型（开/关）</label>
-      <div class="toggle-row" style="margin-top:6px">
+      <div class="section-title">描述符类型</div>
+      <div class="toggle-row" style="margin-bottom:14px">
         <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step3_descriptor.calc_rdkit" checked><span class="dot"></span>RDKit</label>
         <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step3_descriptor.calc_maccs" checked><span class="dot"></span>MACCS</label>
         <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step3_descriptor.calc_morgan" checked><span class="dot"></span>Morgan</label>
@@ -485,10 +503,10 @@ input:checked + .slider:before{transform:translateX(18px)}
         <label class="toggle-label" onclick="toggleLabel(this)"><input type="checkbox" id="step3_descriptor.calc_acsf"><span class="dot"></span>ACSF</label>
         <label class="toggle-label" onclick="toggleLabel(this)"><input type="checkbox" id="step3_descriptor.calc_mbtr"><span class="dot"></span>MBTR</label>
         <label class="toggle-label" onclick="toggleLabel(this)"><input type="checkbox" id="step3_descriptor.calc_mordred"><span class="dot"></span>Mordred</label>
-        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step3_descriptor.calc_prop" checked><span class="dot"></span>分子属性</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step3_descriptor.calc_prop" checked><span class="dot"></span>分子属性(Prop)</label>
       </div>
 
-      <div class="form-grid" style="margin-top:16px">
+      <div class="form-grid" style="margin-bottom:14px">
         <div class="form-group">
           <label>Morgan 半径</label>
           <input id="step3_descriptor.morgan_radius" type="number" value="2">
@@ -498,7 +516,7 @@ input:checked + .slider:before{transform:translateX(18px)}
           <input id="step3_descriptor.morgan_nbits" type="number" value="2048">
         </div>
         <div class="form-group">
-          <label>ECFP/FCFP</label>
+          <label>Morgan 类型</label>
           <select id="step3_descriptor.morgan_use_features">
             <option value="false">ECFP（原子标识符）</option>
             <option value="true">FCFP（药效团特征）</option>
@@ -523,36 +541,238 @@ input:checked + .slider:before{transform:translateX(18px)}
           </select>
         </div>
       </div>
+
+      <div class="section-title">🔗 Pearson 相关性过滤（共线性剔除）</div>
+      <div class="alert alert-warn">
+        启用后，将在描述符 npy 生成后额外执行共线性剔除，过滤后的 npy 保存到 <code>paths.pearson_npy</code>，后续 Step 4/5/6 将自动使用过滤后的 npy。
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>启用 Pearson 过滤 (pearson_filter)</label>
+          <select id="step3_descriptor.pearson_filter">
+            <option value="false">否（跳过）</option>
+            <option value="true">是（执行共线性剔除）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>相关性阈值 (pearson_threshold)</label>
+          <input id="step3_descriptor.pearson_threshold" type="number" step="0.01" min="0.5" max="1.0" value="0.95">
+          <span class="hint">|r| 超过阈值的对，剔除方差较小的特征</span>
+        </div>
+        <div class="form-group">
+          <label>过滤后 npy 路径（留空=自动命名）</label>
+          <input id="step3_descriptor.pearson_output_npy" type="text" placeholder="留空则自动：dataset-fp_pearson.npy">
+          <span class="hint">自动保存到 paths.pearson_npy 目录</span>
+        </div>
+        <div class="form-group">
+          <label>报告 xlsx（留空=自动）</label>
+          <input id="step3_descriptor.pearson_report_xlsx" type="text" placeholder="留空则自动命名">
+        </div>
+        <div class="form-group">
+          <label>生成热图 (pearson_gen_heatmap)</label>
+          <select id="step3_descriptor.pearson_gen_heatmap">
+            <option value="true">是</option>
+            <option value="false">否</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>热图最大维度 (heatmap_max_dim)</label>
+          <input id="step3_descriptor.pearson_heatmap_max_dim" type="number" value="300">
+          <span class="hint">超过此维度不生成热图</span>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- ════════════════════════════ MODELS ══════════════════════════════ -->
-<div class="panel" id="panel-models">
+<!-- ════════════════════════════ STEP 4 ══════════════════════════════ -->
+<div class="panel" id="panel-step4">
   <div class="card">
     <div class="card-header">
-      <h2>🤖 模型选择（Step 6）</h2>
-      <button class="btn btn-primary" onclick="saveSection('step6_train')">💾 保存</button>
+      <h2>4️⃣ Step 4 — 数据抽样（sample_npy.py）</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-info" onclick="startRun('4')">▶ 单独运行</button>
+        <button class="btn btn-primary" onclick="saveSection('step4_sampling')">💾 保存</button>
+      </div>
     </div>
     <div class="card-body">
-      <label style="font-size:.82rem;font-weight:600;color:#556">启用的模型</label>
-      <div class="toggle-row" style="margin-top:6px" id="model-toggles"></div>
+      <div class="alert alert-info">
+        从主数据库中抽取子样本，支持随机/系统/分层/LHS/多样性等五种方法。输出到 <code>paths.samples_dir</code>。
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>启用 (enabled)</label>
+          <select id="step4_sampling.enabled"><option value="false">否</option><option value="true">是</option></select>
+        </div>
+        <div class="form-group">
+          <label>输入 npy（留空=自动推断）</label>
+          <input id="step4_sampling.input_npy" type="text" placeholder="留空=自动用 step3 描述符输出">
+        </div>
+        <div class="form-group">
+          <label>抽样数量 (sample_size)</label>
+          <input id="step4_sampling.sample_size" type="number" value="100">
+          <span class="hint">整数=绝对数量，0~1小数=比例</span>
+        </div>
+        <div class="form-group">
+          <label>随机种子（逗号分隔）</label>
+          <input id="step4_sampling.seeds" type="text" value="42,123,456">
+        </div>
+        <div class="form-group">
+          <label>分层分箱数 (stratified_bins)</label>
+          <input id="step4_sampling.stratified_bins" type="number" value="5">
+        </div>
+        <div class="form-group">
+          <label>LHS 特征字段</label>
+          <input id="step4_sampling.lhs_feature" type="text" value="morgan_descriptor">
+        </div>
+      </div>
+      <div class="section-title">抽样方法</div>
+      <div class="toggle-row">
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step4_sampling.run_random" checked><span class="dot"></span>随机</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step4_sampling.run_systematic" checked><span class="dot"></span>系统/均匀</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step4_sampling.run_stratified" checked><span class="dot"></span>分层</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step4_sampling.run_lhs" checked><span class="dot"></span>LHS（正交）</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step4_sampling.run_diversity" checked><span class="dot"></span>MaxMin多样性</label>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- ════════════════════════════ FEATURES ════════════════════════════ -->
-<div class="panel" id="panel-features">
+<!-- ════════════════════════════ STEP 5 ══════════════════════════════ -->
+<div class="panel" id="panel-step5">
   <div class="card">
     <div class="card-header">
-      <h2>🎛️ 特征开关（Step 6 训练使用的特征）</h2>
-      <button class="btn btn-primary" onclick="saveSection('step6_train')">💾 保存</button>
+      <h2>5️⃣ Step 5 — 数据集划分（dataset_split.py）</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-info" onclick="startRun('5')">▶ 单独运行</button>
+        <button class="btn btn-primary" onclick="saveSection('step5_split')">💾 保存</button>
+      </div>
     </div>
     <div class="card-body">
-      <p style="color:#666;font-size:.85rem;margin-bottom:12px">
-        这里控制训练时从 npy 文件中读取哪些描述符特征（需与 Step 3 计算的类型匹配）。
-      </p>
-      <div class="toggle-row" id="feat-toggles"></div>
+      <div class="alert alert-info">
+        将数据集划分为训练/验证/测试集，支持随机/分层/骨架三种方式。输出到 <code>paths.splits_dir</code>。
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>启用 (enabled)</label>
+          <select id="step5_split.enabled"><option value="false">否</option><option value="true">是</option></select>
+        </div>
+        <div class="form-group">
+          <label>输入 npy（留空=自动推断）</label>
+          <input id="step5_split.input_npy" type="text" placeholder="留空=自动用 step3 描述符输出">
+        </div>
+        <div class="form-group">
+          <label>划分方式 (method)</label>
+          <select id="step5_split.method">
+            <option value="random">random（全随机）</option>
+            <option value="stratified">stratified（分层）</option>
+            <option value="scaffold">scaffold（骨架）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>训练集比例</label>
+          <input id="step5_split.train_ratio" type="number" step="0.05" value="0.8">
+        </div>
+        <div class="form-group">
+          <label>验证集比例</label>
+          <input id="step5_split.valid_ratio" type="number" step="0.05" value="0.1">
+        </div>
+        <div class="form-group">
+          <label>测试集比例</label>
+          <input id="step5_split.test_ratio" type="number" step="0.05" value="0.1">
+        </div>
+        <div class="form-group">
+          <label>分层分箱数 (n_bins)</label>
+          <input id="step5_split.n_bins" type="number" value="5">
+        </div>
+        <div class="form-group">
+          <label>骨架类型 (scaffold_type)</label>
+          <select id="step5_split.scaffold_type">
+            <option value="bemis_murcko">bemis_murcko</option>
+            <option value="murcko_generic">murcko_generic</option>
+            <option value="morgan">morgan（指纹聚类）</option>
+            <option value="maccs">maccs（指纹聚类）</option>
+            <option value="rdkit">rdkit（指纹聚类）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>随机种子 (seed)</label>
+          <input id="step5_split.seed" type="number" value="42">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════ STEP 6 ══════════════════════════════ -->
+<div class="panel" id="panel-step6">
+  <div class="card">
+    <div class="card-header">
+      <h2>🤖 Step 6 — 模型训练（ml-m-full.py）</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-success" onclick="startTrainOnly()">▶ 运行训练</button>
+        <button class="btn btn-primary" onclick="saveSection('step6_train')">💾 保存</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-grid" style="margin-bottom:14px">
+        <div class="form-group">
+          <label>启用 (enabled)</label>
+          <select id="step6_train.enabled"><option value="true">是</option><option value="false">否</option></select>
+        </div>
+        <div class="form-group">
+          <label>输入 npy（留空=自动推断）</label>
+          <input id="step6_train.input_npy" type="text" placeholder="留空=自动用 step3/pearson 输出">
+          <span class="hint">若 step3 启用了 pearson_filter，自动使用过滤后 npy</span>
+        </div>
+        <div class="form-group">
+          <label>随机种子（逗号分隔）</label>
+          <input id="step6_train.seeds" type="text" value="42">
+          <span class="hint">每个种子独立训练一轮，输出在 seed_N/ 子目录</span>
+        </div>
+        <div class="form-group">
+          <label>数据划分方式</label>
+          <select id="step6_train.split_method">
+            <option value="random">random</option>
+            <option value="stratified">stratified（分层，分类推荐）</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-title">🎯 任务类型</div>
+      <div class="form-grid" style="margin-bottom:14px">
+        <div class="form-group">
+          <label>task_type — 任务类型</label>
+          <select id="step6_train.task_type" onchange="onTaskTypeChange(this.value)">
+            <option value="regression">regression（回归，连续值标签）</option>
+            <option value="classification">classification（分类，整数类别标签）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>训练日志（快速启动覆盖种子）</label>
+          <input id="train-seeds-quick" type="text" value="42" placeholder="42 或 42,123,456">
+        </div>
+        <div class="form-group">
+          <label>预演模式（不实际执行）</label>
+          <select id="train-dry">
+            <option value="false">否（正常运行）</option>
+            <option value="true">是（仅打印命令）</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="reg-models-section">
+        <div class="section-title">📊 回归模型（regression 时生效）</div>
+        <div class="toggle-row" id="model-toggles-reg"></div>
+      </div>
+
+      <div id="clf-models-section" style="display:none">
+        <div class="section-title">📊 分类模型（classification 时生效）</div>
+        <div class="toggle-row" id="model-toggles-clf"></div>
+      </div>
+
+      <div class="section-title">📋 训练日志</div>
+      <div class="log-box" id="log-box-train" style="min-height:200px">等待任务启动...</div>
     </div>
   </div>
 </div>
@@ -561,20 +781,18 @@ input:checked + .slider:before{transform:translateX(18px)}
 <div class="panel" id="panel-hpo">
   <div class="card">
     <div class="card-header">
-      <h2>🔍 超参数优化（HPO）</h2>
+      <h2>🔍 HPO 超参数优化 & SHAP 分析</h2>
       <button class="btn btn-primary" onclick="saveSection('step6_train')">💾 保存</button>
     </div>
     <div class="card-body">
+      <div class="section-title">超参数优化 (HPO)</div>
       <div class="form-grid">
         <div class="form-group">
-          <label>启用 HPO (hpo_enable)</label>
-          <select id="step6_train.hpo_enable">
-            <option value="false">否</option>
-            <option value="true">是</option>
-          </select>
+          <label>启用 HPO</label>
+          <select id="step6_train.hpo_enable"><option value="false">否</option><option value="true">是</option></select>
         </div>
         <div class="form-group">
-          <label>HPO 方法 (hpo_method)</label>
+          <label>HPO 方法</label>
           <select id="step6_train.hpo_method">
             <option value="optuna">optuna（贝叶斯，推荐）</option>
             <option value="random">random（随机搜索）</option>
@@ -582,38 +800,34 @@ input:checked + .slider:before{transform:translateX(18px)}
           </select>
         </div>
         <div class="form-group">
-          <label>交叉验证折数 (hpo_cv)</label>
+          <label>交叉验证折数</label>
           <input id="step6_train.hpo_cv" type="number" value="5">
         </div>
         <div class="form-group">
-          <label>试验次数 (hpo_n_iter)</label>
+          <label>试验次数</label>
           <input id="step6_train.hpo_n_iter" type="number" value="30">
         </div>
         <div class="form-group">
-          <label>优化指标 (hpo_scoring)</label>
+          <label>优化指标</label>
           <select id="step6_train.hpo_scoring">
-            <option value="r2">R²</option>
-            <option value="neg_mean_squared_error">-MSE</option>
-            <option value="neg_mean_absolute_error">-MAE</option>
+            <option value="r2">R²（回归）</option>
+            <option value="neg_mean_squared_error">-MSE（回归）</option>
+            <option value="neg_mean_absolute_error">-MAE（回归）</option>
+            <option value="accuracy">Accuracy（分类）</option>
+            <option value="f1_weighted">F1-weighted（分类）</option>
+            <option value="roc_auc_ovr">ROC-AUC（分类）</option>
           </select>
         </div>
+      </div>
+      <div class="section-title">SHAP 分析</div>
+      <div class="form-grid">
         <div class="form-group">
-          <label>SHAP 分析 (shap_enable)</label>
-          <select id="step6_train.shap_enable">
-            <option value="true">是</option>
-            <option value="false">否</option>
-          </select>
+          <label>启用 SHAP</label>
+          <select id="step6_train.shap_enable"><option value="true">是</option><option value="false">否</option></select>
         </div>
         <div class="form-group">
-          <label>数据划分 (split_method)</label>
-          <select id="step6_train.split_method">
-            <option value="random">random（全随机）</option>
-            <option value="stratified">stratified（分层）</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>随机种子 (seeds，逗号分隔)</label>
-          <input id="step6_train.seeds" type="text" value="42">
+          <label>SHAP 背景样本数</label>
+          <input id="step6_train.shap_samples" type="number" value="1000">
         </div>
       </div>
     </div>
@@ -624,13 +838,13 @@ input:checked + .slider:before{transform:translateX(18px)}
 <div class="panel" id="panel-dimred">
   <div class="card">
     <div class="card-header">
-      <h2>📉 降维设置（DimReducer）</h2>
+      <h2>📉 降维设置（Step 6 预处理）</h2>
       <button class="btn btn-primary" onclick="saveSection('step6_train')">💾 保存</button>
     </div>
     <div class="card-body">
       <div class="form-grid">
         <div class="form-group">
-          <label>降维方法 (method)</label>
+          <label>降维方法</label>
           <select id="step6_train.dim_reduction.method">
             <option value="none">none（不降维）</option>
             <option value="pca">PCA</option>
@@ -641,21 +855,18 @@ input:checked + .slider:before{transform:translateX(18px)}
           </select>
         </div>
         <div class="form-group">
-          <label>目标维数 (n_components)</label>
+          <label>目标维数</label>
           <input id="step6_train.dim_reduction.n_components" type="number" value="50">
         </div>
         <div class="form-group">
-          <label>方差解释率 (variance_ratio)</label>
+          <label>方差解释率（PCA 自动选维）</label>
           <input id="step6_train.dim_reduction.variance_ratio" type="text" placeholder="留空=不用，如 0.95">
-          <span class="hint">PCA/TSVD 自动选维数</span>
         </div>
         <div class="form-group">
           <label>KernelPCA 核函数</label>
           <select id="step6_train.dim_reduction.kpca_kernel">
-            <option value="rbf">rbf</option>
-            <option value="poly">poly</option>
-            <option value="sigmoid">sigmoid</option>
-            <option value="cosine">cosine</option>
+            <option value="rbf">rbf</option><option value="poly">poly</option>
+            <option value="sigmoid">sigmoid</option><option value="cosine">cosine</option>
           </select>
         </div>
         <div class="form-group">
@@ -665,6 +876,190 @@ input:checked + .slider:before{transform:translateX(18px)}
         <div class="form-group">
           <label>UMAP min_dist</label>
           <input id="step6_train.dim_reduction.umap_min_dist" type="number" step="0.01" value="0.1">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════ FEATURES ════════════════════════════ -->
+<div class="panel" id="panel-features">
+  <div class="card">
+    <div class="card-header">
+      <h2>🎛️ 特征开关（Step 6 使用的描述符）</h2>
+      <button class="btn btn-primary" onclick="saveSection('step6_train')">💾 保存</button>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-info">
+        此处控制训练时从 npy 中读取哪些描述符特征，需与 Step 3 计算的类型对应。
+      </div>
+      <div class="toggle-row" id="feat-toggles"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════ STEP 7 ══════════════════════════════ -->
+<div class="panel" id="panel-step7">
+  <div class="card">
+    <div class="card-header">
+      <h2>🧪 Step 7 — 可合成性打分（sa_score.py）</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-info" onclick="startRun('7')">▶ 单独运行</button>
+        <button class="btn btn-primary" onclick="saveSection('step7_sa_score')">💾 保存</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-info">
+        对分子库进行合成可行性评估，支持 SA Score、SCScore、SYBA、RAscore、简易评分等多种方法。输出到 <code>paths.sa_score_output</code>。
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>启用 (enabled)</label>
+          <select id="step7_sa_score.enabled"><option value="false">否</option><option value="true">是</option></select>
+        </div>
+        <div class="form-group">
+          <label>输入 npy（留空=自动推断）</label>
+          <input id="step7_sa_score.input_npy" type="text" placeholder="留空=自动用描述符输出">
+        </div>
+      </div>
+      <div class="section-title">评分方法</div>
+      <div class="toggle-row">
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step7_sa_score.calc_sa_score" checked><span class="dot"></span>SA Score（内置，推荐）</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step7_sa_score.calc_scscore" checked><span class="dot"></span>SCScore（需pip install）</label>
+        <label class="toggle-label" onclick="toggleLabel(this)"><input type="checkbox" id="step7_sa_score.calc_syba"><span class="dot"></span>SYBA（需pip install）</label>
+        <label class="toggle-label" onclick="toggleLabel(this)"><input type="checkbox" id="step7_sa_score.calc_rascore"><span class="dot"></span>RAscore（需额外安装）</label>
+        <label class="toggle-label on" onclick="toggleLabel(this)"><input type="checkbox" id="step7_sa_score.calc_simple" checked><span class="dot"></span>简易评分（内置）</label>
+      </div>
+      <div class="section-title">各方法权重（综合评分）</div>
+      <div class="form-grid">
+        <div class="form-group"><label>SA Score 权重</label><input id="step7_sa_score.weights.sa_score" type="number" step="0.1" value="0.4"></div>
+        <div class="form-group"><label>SCScore 权重</label><input id="step7_sa_score.weights.scscore" type="number" step="0.1" value="0.3"></div>
+        <div class="form-group"><label>SYBA 权重</label><input id="step7_sa_score.weights.syba" type="number" step="0.1" value="0.0"></div>
+        <div class="form-group"><label>RAscore 权重</label><input id="step7_sa_score.weights.rascore" type="number" step="0.1" value="0.0"></div>
+        <div class="form-group"><label>简易评分权重</label><input id="step7_sa_score.weights.simple_score" type="number" step="0.1" value="0.3"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════ STEP 8 ══════════════════════════════ -->
+<div class="panel" id="panel-step8">
+  <div class="card">
+    <div class="card-header">
+      <h2>🔎 Step 8 — 相似度搜索（similarity_search.py）</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-info" onclick="startRun('8')">▶ 单独运行</button>
+        <button class="btn btn-primary" onclick="saveSection('step8_similarity')">💾 保存</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-info">
+        给定查询分子集，在数据库中搜索相似分子（Tanimoto 相似度）。输出到 <code>paths.similarity_output</code>。
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>启用 (enabled)</label>
+          <select id="step8_similarity.enabled"><option value="false">否</option><option value="true">是</option></select>
+        </div>
+        <div class="form-group">
+          <label>查询分子 npy (query_npy) ⚠️必填</label>
+          <input id="step8_similarity.query_npy" type="text" placeholder="如：data/processed/query.npy">
+          <span class="hint">含目标分子的 npy 文件路径（相对项目根）</span>
+        </div>
+        <div class="form-group">
+          <label>数据库 npy（留空=自动推断）</label>
+          <input id="step8_similarity.database_npy" type="text" placeholder="留空=自动用描述符输出">
+        </div>
+        <div class="form-group">
+          <label>指纹类型 (fp_type)</label>
+          <select id="step8_similarity.fp_type">
+            <option value="morgan">morgan</option>
+            <option value="maccs">maccs</option>
+            <option value="rdkit">rdkit</option>
+            <option value="atompair">atompair</option>
+            <option value="torsion">torsion</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Morgan 半径</label>
+          <input id="step8_similarity.morgan_radius" type="number" value="2">
+        </div>
+        <div class="form-group">
+          <label>Morgan bits</label>
+          <input id="step8_similarity.morgan_nbits" type="number" value="2048">
+        </div>
+        <div class="form-group">
+          <label>相似度阈值</label>
+          <input id="step8_similarity.sim_threshold" type="number" step="0.05" value="0.7">
+        </div>
+        <div class="form-group">
+          <label>Top-N 返回数</label>
+          <input id="step8_similarity.top_n" type="number" value="10">
+        </div>
+        <div class="form-group">
+          <label>保存完整相似度矩阵</label>
+          <select id="step8_similarity.save_full_matrix">
+            <option value="false">否（仅保存 Top-N）</option>
+            <option value="true">是（完整 NxM 矩阵）</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════ STEP 9 ══════════════════════════════ -->
+<div class="panel" id="panel-step9">
+  <div class="card">
+    <div class="card-header">
+      <h2>🚀 Step 9 — 模型推理（usemodel.py）</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-info" onclick="startRun('9')">▶ 单独运行</button>
+        <button class="btn btn-primary" onclick="saveSection('step9_predict')">💾 保存</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-info">
+        使用训练好的模型对新数据进行推理。支持回归和分类双模式（自动检测）。输出到 <code>paths.prediction_output</code>。
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>启用 (enabled)</label>
+          <select id="step9_predict.enabled"><option value="false">否</option><option value="true">是</option></select>
+        </div>
+        <div class="form-group">
+          <label>待预测 npy (predict_npy) ⚠️必填</label>
+          <input id="step9_predict.predict_npy" type="text" placeholder="如：data/processed/new_mols.npy">
+          <span class="hint">含待预测分子的 npy 文件路径</span>
+        </div>
+        <div class="form-group">
+          <label>模型目录（留空=自动推断）</label>
+          <input id="step9_predict.model_dir" type="text" placeholder="留空=自动用 step6 输出">
+          <span class="hint">自动使用 outputs/training/&lt;项目名&gt;/seed_42/</span>
+        </div>
+        <div class="form-group">
+          <label>使用模型名称 (model_name)</label>
+          <input id="step9_predict.model_name" type="text" value="GradientBoosting">
+          <span class="hint">分类时如 RandomForestClassifier</span>
+        </div>
+        <div class="form-group">
+          <label>任务类型 (task_type)</label>
+          <select id="step9_predict.task_type">
+            <option value="auto">auto（自动检测 task_type.pkl）</option>
+            <option value="regression">regression（回归）</option>
+            <option value="classification">classification（分类）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>使用降维模型</label>
+          <select id="step9_predict.use_dim_reduction">
+            <option value="true">是（自动加载 dim_reducer.pkl）</option>
+            <option value="false">否（强制跳过降维）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>输出 CSV 路径（留空=自动命名）</label>
+          <input id="step9_predict.output_csv" type="text" placeholder="留空则自动命名">
         </div>
       </div>
     </div>
@@ -681,7 +1076,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="card-body">
       <div class="form-grid">
         <div class="form-group">
-          <label>进程优先级 (priority)</label>
+          <label>进程优先级</label>
           <select id="resources.priority">
             <option value="normal">normal（正常）</option>
             <option value="low">low（低，不影响其他程序）</option>
@@ -696,7 +1091,7 @@ input:checked + .slider:before{transform:translateX(18px)}
         <div class="form-group">
           <label>内存上限 GB (mem_limit_gb)</label>
           <input id="resources.mem_limit_gb" type="number" value="0" step="1">
-          <span class="hint">0=不限制（仅 Linux 生效）</span>
+          <span class="hint">0=不限制（仅 Linux）</span>
         </div>
       </div>
     </div>
@@ -716,23 +1111,28 @@ let _logOffset = 0;
 let _logPollTimer = null;
 
 const STEPS_META = [
-  {num:1, name:'数据预处理',    key:'step1_data'},
-  {num:2, name:'数据库分析',    key:'step2_analysis'},
-  {num:3, name:'描述符计算',    key:'step3_descriptor'},
-  {num:4, name:'数据抽样',      key:'step4_sampling'},
-  {num:5, name:'数据集划分',    key:'step5_split'},
-  {num:6, name:'模型训练',      key:'step6_train'},
-  {num:7, name:'可合成性打分',  key:'step7_sa_score'},
-  {num:8, name:'相似度搜索',    key:'step8_similarity'},
-  {num:9, name:'模型推理',      key:'step9_predict'},
+  {num:1, name:'数据预处理',    key:'step1_data',       script:'1dataProcess/create_npy.py'},
+  {num:2, name:'数据库分析',    key:'step2_analysis',   script:'2databaseAnalysis/db_analysis.py'},
+  {num:3, name:'描述符计算',    key:'step3_descriptor', script:'3descriptor/create_by_fp.py'},
+  {num:4, name:'数据抽样',      key:'step4_sampling',   script:'1dataProcess/sample_npy.py'},
+  {num:5, name:'数据集划分',    key:'step5_split',      script:'4machineLearing/dataset_split.py'},
+  {num:6, name:'模型训练',      key:'step6_train',      script:'4machineLearing/ml-m-full.py'},
+  {num:7, name:'可合成性打分',  key:'step7_sa_score',   script:'2databaseAnalysis/sa_score.py'},
+  {num:8, name:'相似度搜索',    key:'step8_similarity', script:'2databaseAnalysis/similarity_search.py'},
+  {num:9, name:'模型推理',      key:'step9_predict',    script:'5modelApplication/usemodel.py'},
 ];
 
-const MODELS_LIST = [
+const MODELS_REG = [
   'LinearRegression','Ridge','LassoCV','ElasticNetCV','HuberRegressor','BayesianRidge',
   'DecisionTree','RandomForest','ExtraTreesRegressor','GradientBoosting','HistGBR',
   'AdaBoost','BaggingRegressor','SVR','KNeighbors','MLP'
 ];
-
+const MODELS_CLF = [
+  'LogisticRegression','RidgeClassifier','SVC','KNeighborsClassifier',
+  'DecisionTreeClassifier','RandomForestClassifier','ExtraTreesClassifier',
+  'GradientBoostingClassifier','HistGBClassifier','AdaBoostClassifier',
+  'MLPClassifier','GaussianNB'
+];
 const FEAT_FLAGS = [
   ['if_rdkit','RDKit'],['if_maccs','MACCS'],['if_morgan','Morgan'],
   ['if_atompair','AtomPair'],['if_torsion','Torsion'],['if_avalon','Avalon'],
@@ -747,10 +1147,14 @@ const FEAT_FLAGS = [
 window.onload = async function() {
   await loadConfig();
   renderStepList();
-  renderModelToggles();
+  renderModelToggles('reg');
+  renderModelToggles('clf');
   renderFeatToggles();
   fillAllFields();
   startStatusPoll();
+  // 同步任务类型显示
+  const tt = document.getElementById('step6_train.task_type');
+  if (tt) onTaskTypeChange(tt.value);
 };
 
 async function loadConfig() {
@@ -759,19 +1163,17 @@ async function loadConfig() {
 }
 
 function fillAllFields() {
-  // 递归填充所有 input/select，id 格式为 "section.key" 或 "section.sub.key"
   function fillId(id, val) {
     const el = document.getElementById(id);
     if (!el) return;
     if (el.type === 'checkbox') {
       el.checked = !!val;
       const lbl = el.closest('.toggle-label');
-      if (lbl) { lbl.classList.toggle('on', !!val); }
+      if (lbl) lbl.classList.toggle('on', !!val);
     } else {
       el.value = Array.isArray(val) ? val.join(',') : (val ?? '');
     }
   }
-
   function walk(obj, prefix) {
     for (const [k, v] of Object.entries(obj || {})) {
       const id = prefix ? `${prefix}.${k}` : k;
@@ -784,14 +1186,34 @@ function fillAllFields() {
   }
   walk(_cfg, '');
 
-  // dashboard summary
+  // dashboard
   const p = _cfg.project || {};
   const n = document.getElementById('dash-name'); if(n) n.value = p.name||'';
   const d = document.getElementById('dash-desc'); if(d) d.value = p.description||'';
+  const v = document.getElementById('dash-ver');  if(v) v.value = p.version||'';
+  const a = document.getElementById('dash-author'); if(a) a.value = p.author||'';
+
+  // model toggles
+  const models_r = ((_cfg.step6_train||{}).models)||{};
+  MODELS_REG.forEach(m => {
+    const cb = document.getElementById(`reg.${m}`);
+    if (cb) { cb.checked = models_r[m] !== false; cb.closest('.toggle-label')?.classList.toggle('on', cb.checked); }
+  });
+  const models_c = ((_cfg.step6_train||{}).clf_models)||{};
+  MODELS_CLF.forEach(m => {
+    const cb = document.getElementById(`clf.${m}`);
+    if (cb) { cb.checked = models_c[m] !== false; cb.closest('.toggle-label')?.classList.toggle('on', cb.checked); }
+  });
+  // feat toggles
+  const feats = ((_cfg.step6_train||{}).features)||{};
+  FEAT_FLAGS.forEach(([k]) => {
+    const cb = document.getElementById(`feat.${k}`);
+    if (cb) { cb.checked = !!feats[k]; cb.closest('.toggle-label')?.classList.toggle('on', cb.checked); }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Panel 切换
+//  Panel / Tab 切换
 // ═══════════════════════════════════════════════════════════════════
 function showPanel(id, linkEl) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -820,10 +1242,11 @@ function renderStepList() {
       <div class="step-num">${s.num}</div>
       <div>
         <div class="step-name">${s.name}</div>
+        <div class="step-script">${s.script}</div>
       </div>
       <div class="step-toggle">
         <button class="btn btn-info" style="padding:5px 12px;font-size:.8rem"
-          onclick="startRun('${s.num}')">单独运行</button>
+          onclick="startRun('${s.num}')">▶ 运行</button>
         <label class="switch">
           <input type="checkbox" id="step-toggle-${s.num}" ${enabled?'checked':''}
             onchange="toggleStep(${s.num}, this.checked)">
@@ -845,35 +1268,34 @@ async function saveStepToggles() {
   const patch = {};
   STEPS_META.forEach(s => {
     const cb = document.getElementById(`step-toggle-${s.num}`);
-    if (cb) { patch[s.key] = { enabled: cb.checked }; }
+    if (cb) patch[s.key] = { enabled: cb.checked };
   });
   await postConfig(patch);
   showToast('步骤开关已保存');
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Model & Feature Toggles
+//  模型 / 特征 Toggles
 // ═══════════════════════════════════════════════════════════════════
-function renderModelToggles() {
-  const el = document.getElementById('model-toggles');
-  const models = (_cfg.step6_train || {}).models || {};
-  el.innerHTML = MODELS_LIST.map(m => {
-    const on = models[m] !== false;
-    return `<label class="toggle-label ${on?'on':''}" onclick="toggleLabel(this)">
-      <input type="checkbox" id="model.${m}" ${on?'checked':''}><span class="dot"></span>${m}
+function renderModelToggles(type) {
+  const list = type === 'reg' ? MODELS_REG : MODELS_CLF;
+  const el = document.getElementById(`model-toggles-${type}`);
+  if (!el) return;
+  el.innerHTML = list.map(m => {
+    return `<label class="toggle-label on" onclick="toggleLabel(this)">
+      <input type="checkbox" id="${type}.${m}" checked><span class="dot"></span>${m}
     </label>`;
   }).join('');
 }
 
 function renderFeatToggles() {
   const el = document.getElementById('feat-toggles');
-  const feats = ((_cfg.step6_train || {}).features) || {};
-  el.innerHTML = FEAT_FLAGS.map(([k,label]) => {
-    const on = !!(feats[k]);
-    return `<label class="toggle-label ${on?'on':''}" onclick="toggleLabel(this)">
-      <input type="checkbox" id="feat.${k}" ${on?'checked':''}><span class="dot"></span>${label}
-    </label>`;
-  }).join('');
+  if (!el) return;
+  el.innerHTML = FEAT_FLAGS.map(([k,label]) =>
+    `<label class="toggle-label" onclick="toggleLabel(this)">
+      <input type="checkbox" id="feat.${k}"><span class="dot"></span>${label}
+    </label>`
+  ).join('');
 }
 
 function toggleLabel(lbl) {
@@ -881,6 +1303,14 @@ function toggleLabel(lbl) {
     const cb = lbl.querySelector('input');
     lbl.classList.toggle('on', cb.checked);
   }, 0);
+}
+
+function onTaskTypeChange(val) {
+  const isClf = (val === 'classification');
+  const regSec = document.getElementById('reg-models-section');
+  const clfSec = document.getElementById('clf-models-section');
+  if (regSec) regSec.style.display = isClf ? 'none' : '';
+  if (clfSec) clfSec.style.display = isClf ? ''     : 'none';
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -898,47 +1328,71 @@ function collectFields(rootEl) {
     }
     const last = keys[keys.length - 1];
     let val = el.type === 'checkbox' ? el.checked : el.value;
-    // 尝试转为数字/布尔
     if (val === 'true')  val = true;
     else if (val === 'false') val = false;
-    else if (val !== '' && !isNaN(Number(val))) val = Number(val);
+    else if (val !== '' && !isNaN(Number(val)) && typeof val === 'string' && val.trim() !== '') val = Number(val);
     cur[last] = val;
   });
   return result;
 }
 
 async function saveSection(sectionKeys) {
-  // 收集整个 main 区域的字段
   const data = collectFields(document.querySelector('.main'));
 
-  // 合并 model toggles
   if (sectionKeys.includes('step6_train')) {
     if (!data.step6_train) data.step6_train = {};
+
+    // 回归模型
     if (!data.step6_train.models) data.step6_train.models = {};
-    MODELS_LIST.forEach(m => {
-      const cb = document.getElementById(`model.${m}`);
+    MODELS_REG.forEach(m => {
+      const cb = document.getElementById(`reg.${m}`);
       if (cb) data.step6_train.models[m] = cb.checked;
     });
+
+    // 分类模型
+    if (!data.step6_train.clf_models) data.step6_train.clf_models = {};
+    MODELS_CLF.forEach(m => {
+      const cb = document.getElementById(`clf.${m}`);
+      if (cb) data.step6_train.clf_models[m] = cb.checked;
+    });
+
+    // 特征开关
     if (!data.step6_train.features) data.step6_train.features = {};
     FEAT_FLAGS.forEach(([k]) => {
       const cb = document.getElementById(`feat.${k}`);
       if (cb) data.step6_train.features[k] = cb.checked ? 1 : 0;
     });
+
     // seeds 字符串 → 数组
     const seedsEl = document.getElementById('step6_train.seeds');
     if (seedsEl) {
-      data.step6_train.seeds = seedsEl.value.split(',').map(s => parseInt(s.trim())).filter(n=>!isNaN(n));
+      data.step6_train.seeds = seedsEl.value.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));
+    }
+  }
+
+  // step3 global_species 字符串 → 数组
+  if (sectionKeys.includes('step3_descriptor')) {
+    const spEl = document.getElementById('step3_descriptor.global_species');
+    if (spEl && data.step3_descriptor) {
+      data.step3_descriptor.global_species = spEl.value.split(',').map(s=>s.trim()).filter(Boolean);
+    }
+  }
+
+  // step4 seeds 字符串 → 数组
+  if (sectionKeys.includes('step4_sampling')) {
+    const seedsEl = document.getElementById('step4_sampling.seeds');
+    if (seedsEl && data.step4_sampling) {
+      data.step4_sampling.seeds = seedsEl.value.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));
     }
   }
 
   await postConfig(data);
-  showToast('配置已保存');
+  showToast('配置已保存 ✓');
 }
 
 async function postConfig(data) {
   const r = await fetch('/save_config', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(data)
   });
   const j = await r.json();
@@ -948,25 +1402,26 @@ async function postConfig(data) {
 // ═══════════════════════════════════════════════════════════════════
 //  运行控制
 // ═══════════════════════════════════════════════════════════════════
-async function startRun(steps) {
+async function startRun(steps, dryRun=false) {
   const r = await fetch('/run', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ steps: steps, dry_run: false })
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ steps: steps, dry_run: dryRun })
   });
   const j = await r.json();
   if (!j.ok) { showToast(j.msg, true); return; }
   showToast(j.msg);
   clearLog();
   startLogStream();
+  showPanel('panel-dashboard', document.querySelector('.sidebar a'));
 }
 
 async function startTrainOnly() {
-  const seeds = document.getElementById('train-seeds').value.trim() || null;
-  const dry   = document.getElementById('train-dry').value === 'true';
+  const seeds = document.getElementById('train-seeds-quick')?.value?.trim() || null;
+  const dry   = document.getElementById('train-dry')?.value === 'true';
+  const task  = document.getElementById('step6_train.task_type')?.value || null;
   const r = await fetch('/run', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ steps: '6', seeds, dry_run: dry })
+    body: JSON.stringify({ steps: '6', seeds, dry_run: dry, task_type: task })
   });
   const j = await r.json();
   if (!j.ok) { showToast(j.msg, true); return; }
@@ -1014,7 +1469,6 @@ function appendLog(line) {
 
 function startLogStream() {
   if (_sseSource) { _sseSource.close(); _sseSource = null; }
-  // 先尝试 SSE
   try {
     _sseSource = new EventSource('/log_stream');
     _sseSource.onmessage = function(e) {
@@ -1022,13 +1476,8 @@ function startLogStream() {
       if (line === '[STREAM_END]') { _sseSource.close(); return; }
       appendLog(line);
     };
-    _sseSource.onerror = function() {
-      _sseSource.close();
-      startLogPoll();
-    };
-  } catch(e) {
-    startLogPoll();
-  }
+    _sseSource.onerror = function() { _sseSource.close(); startLogPoll(); };
+  } catch(e) { startLogPoll(); }
 }
 
 function startLogPoll() {
@@ -1057,11 +1506,11 @@ function updateStatusBar(status) {
   const txt  = document.getElementById('run-status-text');
   const top  = document.getElementById('top-status');
   const stop = document.getElementById('btn-stop');
-  const msgs = {idle:'就绪（空闲）',running:'训练中…',done:'训练完成 ✓',error:'训练出错 ✗'};
-  bar.className = `status-bar ${status}`;
-  txt.textContent = msgs[status] || status;
-  if(top) top.textContent = msgs[status]||status;
-  if(stop) stop.disabled = (status !== 'running');
+  const msgs = {idle:'就绪（空闲）', running:'运行中…', done:'完成 ✓', error:'出错 ✗'};
+  if (bar) bar.className = `status-bar ${status}`;
+  if (txt) txt.textContent = msgs[status] || status;
+  if (top) top.textContent = msgs[status] || status;
+  if (stop) stop.disabled = (status !== 'running');
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1075,14 +1524,14 @@ async function loadOutputs() {
   el.innerHTML = Object.entries(j).map(([dir, files]) =>
     `<div class="file-group">
       <h4>📁 ${dir || '根目录'}</h4>
-      ${files.map(fn => `<a class="file-link" onclick="readFile('${dir}/${fn}')">📄 ${fn}</a>`).join('')}
+      ${files.map(f => `<a class="file-link" onclick="readFile('${f.path}','${f.name}')">📄 ${f.name}</a>`).join('')}
     </div>`
   ).join('');
 }
 
-async function readFile(relPath) {
+async function readFile(relPath, name) {
   document.getElementById('file-path').textContent = relPath;
-  const r = await fetch(`/read_file?path=outputs/training/${relPath}`);
+  const r = await fetch(`/read_file?path=${encodeURIComponent(relPath)}`);
   const j = await r.json();
   document.getElementById('file-content').textContent = j.ok ? j.content : ('错误: ' + j.msg);
 }
@@ -1093,7 +1542,8 @@ async function readFile(relPath) {
 async function initDirs() {
   const r = await fetch('/init_dirs', {method:'POST'});
   const j = await r.json();
-  showToast(j.ok ? '目录创建完成' : '失败: ' + j.msg, !j.ok);
+  if (j.ok) showToast('目录创建完成 ✓');
+  else showToast('失败: ' + (j.msg || j.stderr), true);
 }
 
 // ═══════════════════════════════════════════════════════════════════

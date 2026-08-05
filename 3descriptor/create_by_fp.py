@@ -326,6 +326,56 @@ def calculate_props(mol):
 # ============================== 主程序 =================================
 # ======================================================================
 if __name__ == '__main__':
+    # ==========================================================================
+    # ── MOLEARN_ 环境变量覆盖（由 molearn_run.py 自动设置，单独运行时忽略）───
+    # MOLEARN_INPUT_NPY        : 覆盖 CONFIG['input_npy']
+    # MOLEARN_OUTPUT_DIR       : 覆盖输出目录
+    # MOLEARN_OUTPUT_NAME      : 覆盖输出文件名
+    # MOLEARN_PEARSON_FILTER   : 覆盖 pearson_filter 开关
+    # MOLEARN_PEARSON_THRESHOLD: 覆盖阈值
+    # MOLEARN_PEARSON_OUTPUT_NPY: 覆盖 pearson 输出 npy 路径
+    # MOLEARN_PEARSON_REPORT   : 覆盖 pearson 报告 xlsx 路径
+    # MOLEARN_PEARSON_HEATMAP  : 覆盖是否生成热图
+    # MOLEARN_PEARSON_MAX_DIM  : 覆盖热图最大维度
+    # ==========================================================================
+    _env_in       = os.environ.get('MOLEARN_INPUT_NPY',         '').strip()
+    _env_out_dir  = os.environ.get('MOLEARN_OUTPUT_DIR',        '').strip()
+    _env_out_name = os.environ.get('MOLEARN_OUTPUT_NAME',       '').strip()
+    _env_pf       = os.environ.get('MOLEARN_PEARSON_FILTER',    '').strip().lower()
+    _env_pt       = os.environ.get('MOLEARN_PEARSON_THRESHOLD', '').strip()
+    _env_pnpy     = os.environ.get('MOLEARN_PEARSON_OUTPUT_NPY','').strip()
+    _env_prpt     = os.environ.get('MOLEARN_PEARSON_REPORT',    '').strip()
+    _env_phm      = os.environ.get('MOLEARN_PEARSON_HEATMAP',   '').strip().lower()
+    _env_pmd      = os.environ.get('MOLEARN_PEARSON_MAX_DIM',   '').strip()
+
+    if _env_in:
+        CONFIG['input_npy'] = _env_in
+    if _env_out_dir and _env_out_name:
+        CONFIG['output_npy'] = os.path.join(_env_out_dir, _env_out_name)
+    elif _env_out_dir and not _env_out_name:
+        CONFIG['output_npy'] = os.path.join(
+            _env_out_dir, os.path.basename(CONFIG['output_npy']))
+    if _env_pf in ('true', '1', 'yes'):
+        CONFIG['pearson_filter'] = True
+    elif _env_pf in ('false', '0', 'no'):
+        CONFIG['pearson_filter'] = False
+    if _env_pt:
+        CONFIG['pearson_threshold'] = float(_env_pt)
+    if _env_pnpy:
+        CONFIG['pearson_output_npy'] = _env_pnpy
+    if _env_prpt:
+        CONFIG['pearson_report_xlsx'] = _env_prpt
+    if _env_phm in ('true', '1', 'yes'):
+        CONFIG['pearson_gen_heatmap'] = True
+    elif _env_phm in ('false', '0', 'no'):
+        CONFIG['pearson_gen_heatmap'] = False
+    if _env_pmd:
+        CONFIG['pearson_heatmap_max_dim'] = int(_env_pmd)
+    # ── 确保输出目录存在 ──────────────────────────────────────────────────
+    _out_dir = os.path.dirname(CONFIG.get('output_npy', ''))
+    if _out_dir:
+        os.makedirs(_out_dir, exist_ok=True)
+
     # ── 打印配置摘要 ──────────────────────────────────────────────────────
     print("\n" + "=" * 60)
     print("  create_by_fp.py — 分子描述符计算")

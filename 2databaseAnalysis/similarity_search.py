@@ -77,6 +77,23 @@ import matplotlib.pyplot as plt
 warnings.filterwarnings('ignore')
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+
+# =============================================================================
+# ── MOLEARN_ 环境变量覆盖（由 molearn_run.py 自动设置，单独运行时忽略）─────────
+# MOLEARN_INPUT_NPY  : 覆盖 DATABASE_NPY
+# MOLEARN_QUERY_NPY  : 覆盖 QUERY_NPY
+# MOLEARN_OUTPUT_DIR : 覆盖 OUTPUT_DIR
+# =============================================================================
+_env_input  = os.environ.get('MOLEARN_INPUT_NPY', '').strip()
+_env_query  = os.environ.get('MOLEARN_QUERY_NPY', '').strip()
+_env_outdir = os.environ.get('MOLEARN_OUTPUT_DIR', '').strip()
+if _env_input:
+    DATABASE_NPY = _env_input
+if _env_query:
+    QUERY_NPY    = _env_query
+if _env_outdir:
+    OUTPUT_DIR   = _env_outdir
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ── seaborn ───────────────────────────────────────────────────────────────────

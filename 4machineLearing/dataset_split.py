@@ -69,24 +69,53 @@ import pandas as pd
 warnings.filterwarnings('ignore')
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.environ.get('MOLEARN_ROOT', '') or os.path.dirname(_HERE)
 sys.path.insert(0, _HERE)
 
-from feature_utils import load_npy, load_config, resolve_path
+from feature_utils import load_npy, load_config, resolve_path, npy_save as _npy_save_fu
 
 # =============================================================================
 # ── MOLEARN_ 环境变量覆盖（由 molearn_run.py 自动设置，单独运行时忽略）─────────
-# MOLEARN_INPUT_NPY  : 覆盖 INPUT_NPY
-# MOLEARN_OUTPUT_DIR : 覆盖 OUTPUT_DIR
+# MOLEARN_INPUT_NPY      : 覆盖 INPUT_NPY
+# MOLEARN_OUTPUT_DIR     : 覆盖 OUTPUT_DIR
+# MOLEARN_SPLIT_METHOD   : 覆盖 SPLIT_METHOD  (random|stratified|scaffold)
+# MOLEARN_SPLIT_SEED     : 覆盖 SPLIT_SEED
+# MOLEARN_TRAIN_RATIO    : 覆盖 TRAIN_RATIO
+# MOLEARN_VALID_RATIO    : 覆盖 VALID_RATIO
+# MOLEARN_TEST_RATIO     : 覆盖 TEST_RATIO
+# MOLEARN_STRATIFIED_BINS: 覆盖 STRATIFIED_N_BINS
+# MOLEARN_SCAFFOLD_TYPE  : 覆盖 SCAFFOLD_TYPE
 # =============================================================================
-_env_input  = os.environ.get('MOLEARN_INPUT_NPY', '').strip()
-_env_outdir = os.environ.get('MOLEARN_OUTPUT_DIR', '').strip()
-if _env_input:
-    INPUT_NPY  = _env_input
-if _env_outdir:
-    OUTPUT_DIR = _env_outdir
+_env_input   = os.environ.get('MOLEARN_INPUT_NPY',       '').strip()
+_env_outdir  = os.environ.get('MOLEARN_OUTPUT_DIR',      '').strip()
+_env_method  = os.environ.get('MOLEARN_SPLIT_METHOD',    '').strip()
+_env_seed    = os.environ.get('MOLEARN_SPLIT_SEED',      '').strip()
+_env_train   = os.environ.get('MOLEARN_TRAIN_RATIO',     '').strip()
+_env_valid   = os.environ.get('MOLEARN_VALID_RATIO',     '').strip()
+_env_test    = os.environ.get('MOLEARN_TEST_RATIO',      '').strip()
+_env_bins    = os.environ.get('MOLEARN_STRATIFIED_BINS', '').strip()
+_env_scaffold= os.environ.get('MOLEARN_SCAFFOLD_TYPE',   '').strip()
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# OUTPUT_DIR 默认值：优先使用 MOLEARN_ROOT 下的 data/splits，回退到脚本目录相对路径
+if not os.path.isabs(OUTPUT_DIR):
+    OUTPUT_DIR = os.path.join(_ROOT, 'data', 'splits')
 
+if _env_input:   INPUT_NPY       = _env_input
+if _env_outdir:  OUTPUT_DIR      = _env_outdir
+if _env_method in ('random', 'stratified', 'scaffold'):
+    SPLIT_METHOD = _env_method
+if _env_seed.isdigit():   SPLIT_SEED      = int(_env_seed)
+if _env_train:
+    try: TRAIN_RATIO = float(_env_train)
+    except ValueError: pass
+if _env_valid:
+    try: VALID_RATIO = float(_env_valid)
+    except ValueError: pass
+if _env_test:
+    try: TEST_RATIO  = float(_env_test)
+    except ValueError: pass
+if _env_bins.isdigit():   STRATIFIED_N_BINS = int(_env_bins)
+if _env_scaffold: SCAFFOLD_TYPE = _env_scaffold
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
 
@@ -97,10 +126,10 @@ def _check_ratios():
 
 def _save_split(mol_list, fname, split_label):
     path = os.path.join(OUTPUT_DIR, fname)
-    d = {
-        'successful': mol_list,
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    extra_meta = {
         'failed_count': 0,
-        'error_stats': {},
+        'error_stats':  {},
         'split_info': {
             'method': SPLIT_METHOD,
             'split':  split_label,
@@ -108,7 +137,7 @@ def _save_split(mol_list, fname, split_label):
             'source': INPUT_NPY,
         }
     }
-    np.save(path, d, allow_pickle=True)
+    _npy_save_fu(path, mol_list, extra_meta=extra_meta)
     print(f"  ✓ {split_label:6s}: {len(mol_list):5d} 分子 → {path}")
     return path
 

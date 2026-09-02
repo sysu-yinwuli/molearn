@@ -4,13 +4,18 @@
 # ============================= 配置区域（只改这里）============================
 # =============================================================================
 
+import os as _os  # 仅供 CONFIG 区域使用，正式导入在下方
+
 # ---------- 任务类型 ----------
 # 'regression'    : 回归任务（标签为连续数值，如能量、溶解度）
 # 'classification': 分类任务（标签为整数类别，如 0/1/2/3 等）
-TASK_TYPE    = 'regression'
+# 优先从 MOLEARN_CONFIG 写入的 config.txt 中读取（由 molearn_run.py 注入）
+TASK_TYPE    = 'regression'   # 仅作默认值，实际由 config['task_type'] 覆盖
 
 # ---------- 数据配置 ----------
-CONFIG_TXT   = 'config-full-1.txt'   # 特征开关配置文件（npy_path、if_rdkit 等）
+# 优先读取 MOLEARN_INPUT_NPY / MOLEARN_FEAT_* 等环境变量（由 molearn_run.py 注入）；
+# 单独运行时若无环境变量，则回退到 CONFIG_TXT 本地文件
+CONFIG_TXT   = _os.environ.get('MOLEARN_CONFIG', '').strip() or 'config-full-1.txt'
 
 # ---------- 启用/禁用模型 ----------
 # 回归模式（TASK_TYPE='regression'）使用 MODEL_ENABLE_REG
@@ -50,8 +55,7 @@ MODEL_ENABLE_CLF = {
     "GaussianNB":             True,
 }
 
-# 向后兼容别名（由运行时自动选择，此处仅做占位，勿手动修改）
-MODEL_ENABLE = MODEL_ENABLE_REG
+# （MODEL_ENABLE_REG / MODEL_ENABLE_CLF 由运行时通过 _build_models() 自动选择）
 
 # ---------- 回归模型超参数 ----------
 # key 格式：Pipeline 步骤名 "model__参数名"，直接传给 pipe.set_params()
@@ -118,8 +122,7 @@ MODEL_PARAMS_CLF = {
     "GaussianNB":              {},
 }
 
-# 向后兼容别名
-MODEL_PARAMS = MODEL_PARAMS_REG
+# （MODEL_PARAMS_REG / MODEL_PARAMS_CLF 由运行时通过 _build_models() 自动选择）
 
 # ---------- 超参数优化（HPO）配置 ----------
 HPO_ENABLE   = False        # 总开关
@@ -239,6 +242,11 @@ DIM_REDUCTION_CFG = {
 SPLIT_METHOD  = 'random'      # 'random' | 'stratified'
 SPLIT_N_BINS  = 5             # stratified 时的分层分箱数
 
+# ---------- 训练超时配置 ----------
+# 每个模型允许的最长训练+评估时间（秒）。超时后跳过该模型，不影响后续。
+# 设为 0 或负数表示不限时。SVR/MLP/KNeighbors 在高维大数据集上可能很慢，建议设置。
+TRAIN_TIMEOUT = 300           # 单模型最大训练时间（秒），默认 300s = 5 min
+
 # =============================================================================
 # ============================= 以下代码勿动 ==================================
 # =============================================================================
@@ -248,6 +256,8 @@ import sys
 import copy
 import datetime
 import traceback
+import signal
+import multiprocessing as _mp
 
 import numpy as np
 import pandas as pd
@@ -296,19 +306,100 @@ from feature_utils import (load_npy, extract_features, build_header,
                             clean_features, load_config, parse_flags, resolve_path,
                             fit_dim_reduction, DimReducer)
 
-# ── 路径解析 ──────────────────────────────────────────────────────────────────
-_config_path = resolve_path(CONFIG_TXT, _HERE)
-config = load_config(_config_path)
+# ── 参数初始化：优先读取 MOLEARN_* 环境变量，回退到 config.txt 文件 ───────────
+#
+# 注入方式说明：
+#   molearn_run.py 调用时通过 MOLEARN_* 直接注入所有参数（无需中间文件）；
+#   单独运行脚本时若无 MOLEARN_* 则按 CONFIG_TXT 路径读取旧格式 config 文件（向后兼容）。
+#
+_env_npy        = os.environ.get('MOLEARN_INPUT_NPY',      '').strip()
+_env_out        = os.environ.get('MOLEARN_OUTPUT_DIR',     '').strip()
+_env_seeds_str  = os.environ.get('MOLEARN_SEEDS',          '').strip()
+_env_task       = os.environ.get('MOLEARN_TASK_TYPE',      '').strip()
+_env_split      = os.environ.get('MOLEARN_SPLIT_METHOD',   '').strip()
+_env_bins       = os.environ.get('MOLEARN_SPLIT_N_BINS',   '').strip()
 
-print("当前配置:")
-for k, v in config.items():
-    print(f"  {k}: {v}")
+# 14 特征开关环境变量
+_FEAT_KEYS = ['if_rdkit','if_maccs','if_morgan','if_atompair','if_torsion',
+              'if_avalon','if_soap','if_acsf','if_mbtr','if_mordred',
+              'if_prop','if_QC','if_extra','if_m']
+_env_feat = {k: os.environ.get(f'MOLEARN_FEAT_{k.upper()}', '').strip()
+             for k in _FEAT_KEYS}
+
+_use_env = bool(_env_npy)   # 有 MOLEARN_INPUT_NPY 时认为由 molearn_run.py 调用
+
+if _use_env:
+    # ── 路径：直接使用注入的 npy 路径 ─────────────────────────────────────────
+    ml_npy   = [p.strip() for p in _env_npy.split(',')]
+    _config_path = ''   # 无需 config 文件
+
+    # ── 任务类型 ───────────────────────────────────────────────────────────────
+    if _env_task in ('regression', 'classification'):
+        TASK_TYPE = _env_task
+    print(f"[INFO] TASK_TYPE={TASK_TYPE}  来源=MOLEARN_TASK_TYPE")
+
+    # ── 划分配置 ───────────────────────────────────────────────────────────────
+    if _env_split in ('random', 'stratified'):
+        SPLIT_METHOD = _env_split
+    if _env_bins.isdigit():
+        SPLIT_N_BINS = int(_env_bins)
+
+    # ── seeds（覆盖顶部默认） ──────────────────────────────────────────────────
+    if _env_seeds_str:
+        try:
+            _env_seeds_parsed = [int(s.strip()) for s in _env_seeds_str.split(',')]
+        except ValueError:
+            _env_seeds_parsed = None
+    else:
+        _env_seeds_parsed = None
+
+    # ── 构造 flags config（供 parse_flags 使用） ───────────────────────────────
+    config = {k: (int(_env_feat[k]) if _env_feat[k].isdigit() else 0)
+              for k in _FEAT_KEYS}
+
+    # ── 输出目录 ───────────────────────────────────────────────────────────────
+    _output_base_env = _env_out if _env_out else os.path.join(_HERE, 'results')
+
+    print("[INFO] 参数来源: MOLEARN_* 环境变量")
+    for k in _FEAT_KEYS:
+        print(f"  {k}: {config[k]}")
+
+else:
+    # ── 向后兼容：从 config.txt 读取（单独运行时使用）──────────────────────────
+    _config_path = resolve_path(CONFIG_TXT, _HERE)
+    config = load_config(_config_path)
+    print(f"[INFO] 参数来源: {_config_path}")
+    print("当前配置:")
+    for k, v in config.items():
+        print(f"  {k}: {v}")
+
+    # 从 config 读取 TASK_TYPE
+    _cfg_task = config.get('task_type', '').strip()
+    if _cfg_task in ('regression', 'classification'):
+        TASK_TYPE = _cfg_task
+    print(f"[INFO] TASK_TYPE={TASK_TYPE}")
+
+    # 从 config 读取 SPLIT 配置
+    _cfg_split = config.get('split_method', '').strip()
+    if _cfg_split in ('random', 'stratified'):
+        SPLIT_METHOD = _cfg_split
+    _cfg_bins = config.get('split_n_bins', '')
+    if str(_cfg_bins).isdigit():
+        SPLIT_N_BINS = int(_cfg_bins)
+
+    ml_npy = [p.strip() for p in config['npy_path'].split(',')]
+    _env_seeds_parsed = None
+    _output_base_env  = config.get('res_folder', 'results')
+
+# ── 公共信息写入 config，供 model_card 使用 ────────────────────────────────────
+config['_task_type']    = TASK_TYPE
+config['_config_file']  = _config_path
+config['_split_method'] = SPLIT_METHOD
+config['_hpo_method']   = HPO_METHOD if HPO_ENABLE else 'disabled'
 
 # ── 加载数据 ──────────────────────────────────────────────────────────────────
-ml_npy = [p.strip() for p in config['npy_path'].split(',')]
 n_files = len(ml_npy)
-
-datas = [load_npy(resolve_path(p, _HERE)) for p in ml_npy]
+datas   = [load_npy(resolve_path(p, _HERE)) for p in ml_npy]
 
 sample_counts = [len(d) for d in datas]
 if len(set(sample_counts)) != 1:
@@ -372,8 +463,7 @@ _ALL_BASE_MODELS_CLF = {
     "GaussianNB":              Pipeline([('scaler', StandardScaler()), ('model', GaussianNB())]),
 }
 
-# 向后兼容别名
-_ALL_BASE_MODELS = _ALL_BASE_MODELS_REG
+# （_ALL_BASE_MODELS_REG / _ALL_BASE_MODELS_CLF 由运行时通过 _build_models() 自动选择）
 
 # ── 分类模型中支持 SHAP TreeExplainer 的模型集合 ─────────────────────────────
 SHAP_TREE_MODELS_CLF = {"DecisionTreeClassifier", "RandomForestClassifier",
@@ -679,46 +769,13 @@ def _write_model_card(pipe, name, metrics, seed, config, flags,
         f.write('\n'.join(lines) + '\n')
 
 
-def _dump_model_params(pipe, name, metrics: dict, seed: int, out_path: str):
-    """
-    轻量版参数报告（保留向后兼容）。
-    完整信息卡由 _write_model_card() 生成。
-    """
-    model_step = pipe.named_steps['model']
-    params = model_step.get_params()
-    scaler_info = ""
-    if 'scaler' in pipe.named_steps:
-        scaler = pipe.named_steps['scaler']
-        scaler_info = f"\n[Scaler]\ntype: {type(scaler).__name__}\n"
-
-    lines = [
-        f"# Model Parameter Report",
-        f"# Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        f"# Seed: {seed}",
-        f"",
-        f"[Model]",
-        f"name: {name}",
-        f"class: {type(model_step).__name__}",
-        f"module: {type(model_step).__module__}",
-    ]
-    if scaler_info:
-        lines.append(scaler_info.strip())
-
-    lines += ["", "[Hyperparameters]"]
-    for k, v in sorted(params.items()):
-        lines.append(f"{k}: {v}")
-
-    lines += ["", "[Metrics on Test Set]"]
-    for metric, val in metrics.items():
-        lines.append(f"{metric}: {val:.6f}")
-
-    with open(out_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(lines) + '\n')
 
 # ── 超参数优化 ────────────────────────────────────────────────────────────────
 def _run_hpo(pipe, name, X_tr, y_tr, seed):
     """返回 (最优已fit Pipeline, 最优参数 dict)。"""
-    target = set(HPO_MODELS) if HPO_MODELS else set(_ALL_BASE_MODELS)
+    _is_clf_hpo = (TASK_TYPE == 'classification')
+    _all_models = _ALL_BASE_MODELS_CLF if _is_clf_hpo else _ALL_BASE_MODELS_REG
+    target = set(HPO_MODELS) if HPO_MODELS else set(_all_models)
     if name not in target:
         return pipe, {}
     if HPO_METHOD in ('grid', 'random') and name not in HPO_PARAM_GRIDS:
@@ -752,8 +809,7 @@ def _run_hpo(pipe, name, X_tr, y_tr, seed):
             print("  [HPO] optuna 未安装（pip install optuna），跳过")
             return pipe, {}
 
-        _probe = _optuna_spaces.__code__.co_consts
-        if name not in str(_probe):
+        if not _optuna_spaces(None, name):
             print(f"  [HPO] {name} 无 Optuna 空间定义，跳过")
             return pipe, {}
 
@@ -778,6 +834,84 @@ def _run_hpo(pipe, name, X_tr, y_tr, seed):
         return pipe, best_params
 
     raise ValueError(f"HPO_METHOD='{HPO_METHOD}' 无效，应为 'grid'/'random'/'optuna'")
+
+# ── 带超时的模型训练 ─────────────────────────────────────────────────────────────
+#
+# 实现策略（优先级从高到低）：
+#   1. Linux/macOS：signal.SIGALRM —— 同进程、零序列化开销、最可靠
+#   2. 其他平台（Windows）：multiprocessing fork/spawn —— 跨进程，有序列化开销
+#   3. timeout_s <= 0：不限时，直接训练
+
+class _TrainTimeout(Exception):
+    """内部超时信号异常，仅在 SIGALRM handler 中抛出。"""
+    pass
+
+
+def _fit_with_timeout(pipe, X_tr, y_tr, name, timeout_s):
+    """
+    训练模型，超过 timeout_s 秒则中止。
+    返回 (fitted_pipe, error_msg)：
+      - 成功：(fitted_pipe, None)
+      - 超时：(None, 'TIMEOUT')
+      - 训练异常：(None, error_repr_str)
+    timeout_s <= 0 表示不限时。
+    """
+    # ── 情况 A：不限时 ──────────────────────────────────────────────────────
+    if timeout_s <= 0:
+        try:
+            pipe.fit(X_tr, y_tr)
+            return pipe, None
+        except BaseException as exc:
+            return None, repr(exc)
+
+    # ── 情况 B：Linux/macOS → SIGALRM（同进程，无序列化开销）──────────────
+    if hasattr(signal, 'SIGALRM'):
+        def _handler(signum, frame):
+            raise _TrainTimeout()
+
+        old_handler = signal.signal(signal.SIGALRM, _handler)
+        signal.alarm(int(timeout_s))
+        try:
+            pipe.fit(X_tr, y_tr)
+            signal.alarm(0)                          # 取消闹钟
+            signal.signal(signal.SIGALRM, old_handler)
+            return pipe, None
+        except _TrainTimeout:
+            signal.signal(signal.SIGALRM, old_handler)
+            return None, 'TIMEOUT'
+        except BaseException as exc:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+            return None, repr(exc)
+
+    # ── 情况 C：Windows → multiprocessing（fork 不可用，用 spawn）─────────
+    # 注意：spawn 需要序列化 pipe/X_tr/y_tr，大数据集时较慢
+    def _worker(q, _pipe, _X, _y):
+        try:
+            _pipe.fit(_X, _y)
+            q.put(('ok', _pipe))
+        except BaseException as exc:
+            q.put(('err', repr(exc)))
+
+    ctx = _mp.get_context('spawn')
+    q   = ctx.Queue()
+    p   = ctx.Process(target=_worker, args=(q, pipe, X_tr, y_tr))
+    p.start()
+    p.join(timeout=timeout_s)
+
+    if p.is_alive():
+        p.terminate()
+        p.join(timeout=5)
+        if p.is_alive():
+            p.kill()
+            p.join()
+        return None, 'TIMEOUT'
+
+    if not q.empty():
+        status, payload = q.get_nowait()
+        return (payload, None) if status == 'ok' else (None, payload)
+    return None, f'worker exited with code {p.exitcode}'
+
 
 # ── SHAP 分析 ──────────────────────────────────────────────────────────────────
 def _run_shap(pipe, name, X_bg, seed, shap_dir, shap_tree_models=None):
@@ -819,13 +953,16 @@ def _run_shap(pipe, name, X_bg, seed, shap_dir, shap_tree_models=None):
         print(f"  [WARN] {name} SHAP 失败（不影响训练）: {e}")
 
 # ── 主训练循环 ────────────────────────────────────────────────────────────────
-seeds       = [int(s.strip()) for s in config.get('seed', '42').split(',')]
-output_base = config.get('res_folder', 'results')
-
-# 将训练上下文注入 config，供 model card 使用
-config['_config_file'] = _config_path
-config['_split_method'] = SPLIT_METHOD
-config['_hpo_method']   = HPO_METHOD if HPO_ENABLE else 'disabled'
+# seeds：优先 MOLEARN_SEEDS（由 molearn_run.py 注入），次为 config 文件中的 seed 字段，最后默认 [42]
+if _env_seeds_parsed:
+    seeds = _env_seeds_parsed
+else:
+    _seed_raw = config.get('seed', '42')
+    try:
+        seeds = [int(s.strip()) for s in str(_seed_raw).split(',')]
+    except ValueError:
+        seeds = [42]
+output_base = _output_base_env
 
 for seed in seeds:
     print(f"\n{'='*60}\n  Seed = {seed}\n{'='*60}")
@@ -846,9 +983,22 @@ for seed in seeds:
         )
         print(f"  [划分] 全随机划分")
 
-    # 标签标准化（仅对训练集 fit，防止数据泄漏）
-    y_scaler = StandardScaler()
-    y_train_s = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).flatten()
+    _is_clf = (TASK_TYPE == 'classification')
+
+    # ── 标签处理 ──────────────────────────────────────────────────────────────
+    if _is_clf:
+        # 分类：整数标签，不做 StandardScaler
+        le = LabelEncoder()
+        y_train_enc = le.fit_transform(y_train.values.astype(int))
+        y_test_enc  = le.transform(y_test.values.astype(int))
+        y_train_fit = y_train_enc   # 传入 fit
+        y_scaler    = None
+        classes     = le.classes_
+    else:
+        # 回归：StandardScaler 标准化标签（防止梯度爆炸，训练集 fit）
+        y_scaler  = StandardScaler()
+        y_train_fit = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).flatten()
+        classes   = None
 
     # ── 降维（可选）────────────────────────────────────────────────────────────
     dim_reducer = None
@@ -856,23 +1006,24 @@ for seed in seeds:
         print(f"  [降维] 开始降维: method={DIM_REDUCTION_CFG['method']}")
         dim_reducer, X_train_np = fit_dim_reduction(X_train.values, DIM_REDUCTION_CFG)
         X_test_np  = dim_reducer.transform(X_test.values)
-        # 重新包装为 DataFrame（列名为 dr_0, dr_1, ...）
-        dr_cols   = [f"dr_{i}" for i in range(X_train_np.shape[1])]
-        X_train   = pd.DataFrame(X_train_np, columns=dr_cols, index=X_train.index)
-        X_test    = pd.DataFrame(X_test_np,  columns=dr_cols, index=X_test.index)
+        dr_cols    = [f"dr_{i}" for i in range(X_train_np.shape[1])]
+        X_train    = pd.DataFrame(X_train_np, columns=dr_cols, index=X_train.index)
+        X_test     = pd.DataFrame(X_test_np,  columns=dr_cols, index=X_test.index)
     else:
         print(f"  [降维] 跳过（method=none）")
 
-    # 输出目录
+    # ── 输出目录 ─────────────────────────────────────────────────────────────
     out_dir = os.path.join(output_base, f"seed_{seed}")
     for sub in ("models", "images", "results", "shap"):
         os.makedirs(os.path.join(out_dir, sub), exist_ok=True)
 
-    # 保存推理所需资源
+    # ── 保存推理所需资源 ──────────────────────────────────────────────────────
     joblib.dump(X_train.columns.tolist(), os.path.join(out_dir, 'training_columns.pkl'))
-    joblib.dump(y_scaler,                 os.path.join(out_dir, 'y_scaler.pkl'))
-
-    # 保存降维器（如果启用）
+    joblib.dump(TASK_TYPE,                os.path.join(out_dir, 'task_type.pkl'))
+    if _is_clf:
+        joblib.dump(classes, os.path.join(out_dir, 'classes.pkl'))
+    else:
+        joblib.dump(y_scaler, os.path.join(out_dir, 'y_scaler.pkl'))
     if dim_reducer is not None:
         dim_reducer.save(os.path.join(out_dir, 'dim_reducer.pkl'))
 
@@ -881,83 +1032,147 @@ for seed in seeds:
     models      = _build_models()
 
     for name, pipe in models.items():
+        print(f"\n  ── {name} ──────────────────────────────────────────────")
+        _t0 = datetime.datetime.now()
+
+        # ── Step 1: 训练（带超时保护）────────────────────────────────────────
         try:
-            # —— HPO 或直接训练 ——
-            _t0 = datetime.datetime.now()
             if HPO_ENABLE:
-                pipe, best = _run_hpo(pipe, name, X_train, y_train_s, seed)
+                # HPO 内部已有完整错误处理，不套超时（HPO 本身耗时预期长）
+                pipe, best = _run_hpo(pipe, name, X_train, y_train_fit, seed)
                 if best:
                     hpo_results[name] = best
                 if not best:
-                    pipe.fit(X_train, y_train_s)
+                    # HPO 未给出最优参数时回落到直接训练，套超时
+                    pipe, _fit_err = _fit_with_timeout(pipe, X_train, y_train_fit,
+                                                       name, TRAIN_TIMEOUT)
+                    if pipe is None:
+                        if _fit_err == 'TIMEOUT':
+                            print(f"  [SKIP] {name} 训练超时（>{TRAIN_TIMEOUT}s），跳过")
+                        else:
+                            print(f"  [SKIP] {name} 训练失败（{_fit_err}），跳过")
+                        continue
             else:
-                pipe.fit(X_train, y_train_s)
-            _train_time = (datetime.datetime.now() - _t0).total_seconds()
+                pipe, _fit_err = _fit_with_timeout(pipe, X_train, y_train_fit,
+                                                   name, TRAIN_TIMEOUT)
+                if pipe is None:
+                    if _fit_err == 'TIMEOUT':
+                        print(f"  [SKIP] {name} 训练超时（>{TRAIN_TIMEOUT}s），跳过")
+                    else:
+                        print(f"  [SKIP] {name} 训练失败（{_fit_err}），跳过")
+                    continue
 
-            # —— 评估（在原始标签空间）——
-            y_pred = y_scaler.inverse_transform(
-                pipe.predict(X_test).reshape(-1, 1)
-            ).flatten()
-            y_true = y_test.values
+        except BaseException as e:
+            print(f"  [SKIP] {name} 训练阶段崩溃: {e}")
+            traceback.print_exc()
+            continue   # 单模型失败，继续下一个
 
-            mae = mean_absolute_error(y_true, y_pred)
-            mse = mean_squared_error(y_true, y_pred)
-            r2  = r2_score(y_true, y_pred)
-            results.append((name, mae, mse, r2))
-            print(f"  {name:22s}  MAE={mae:.4f}  MSE={mse:.4f}  R²={r2:.4f}")
+        _train_time = (datetime.datetime.now() - _t0).total_seconds()
 
-            # —— 保存模型 ——
+        # ── Step 2: 评估 ───────────────────────────────────────────────────────
+        metrics = {}
+        try:
+            if _is_clf:
+                # —— 分类评估 ——
+                y_pred_enc = pipe.predict(X_test)
+                y_true_enc = y_test_enc
+                acc = accuracy_score(y_true_enc, y_pred_enc)
+                f1  = f1_score(y_true_enc, y_pred_enc, average='weighted', zero_division=0)
+                # AUC（需要 predict_proba，不支持时跳过）
+                try:
+                    if len(classes) == 2:
+                        proba = pipe.predict_proba(X_test)[:, 1]
+                        auc   = roc_auc_score(y_true_enc, proba)
+                    else:
+                        proba = pipe.predict_proba(X_test)
+                        auc   = roc_auc_score(y_true_enc, proba,
+                                              multi_class='ovr', average='weighted')
+                except Exception:
+                    auc = float('nan')
+                metrics = {"Accuracy": acc, "F1_weighted": f1, "AUC": auc}
+                results.append((name, acc, f1, auc))
+                print(f"  {name:28s}  Acc={acc:.4f}  F1={f1:.4f}  AUC={auc:.4f}"
+                      f"  ({_train_time:.1f}s)")
+            else:
+                # —— 回归评估（在原始标签空间）——
+                y_pred = y_scaler.inverse_transform(
+                    pipe.predict(X_test).reshape(-1, 1)
+                ).flatten()
+                y_true = y_test.values
+                mae = mean_absolute_error(y_true, y_pred)
+                mse = mean_squared_error(y_true, y_pred)
+                r2  = r2_score(y_true, y_pred)
+                metrics = {"MAE": mae, "MSE": mse, "R2": r2}
+                results.append((name, mae, mse, r2))
+                print(f"  {name:28s}  MAE={mae:.4f}  MSE={mse:.4f}  R²={r2:.4f}"
+                      f"  ({_train_time:.1f}s)")
+        except BaseException as e:
+            print(f"  [WARN] {name} 评估失败，跳过该模型后续步骤: {e}")
+            traceback.print_exc()
+            continue   # 评估失败则不保存该模型
+
+        # ── Step 3: 保存模型文件 ──────────────────────────────────────────────
+        try:
             model_path = os.path.join(out_dir, "models", f"{name}.joblib")
             joblib.dump(pipe, model_path)
+        except BaseException as e:
+            print(f"  [WARN] {name} 模型文件保存失败: {e}")
 
-            # —— 导出模型参数报告（轻量版）——
-            _dump_model_params(
-                pipe, name,
-                metrics={"MAE": mae, "MSE": mse, "R2": r2},
-                seed=seed,
-                out_path=os.path.join(out_dir, "models", f"{name}_params.txt")
-            )
+        # ── Step 4: 绘图（失败不阻断）─────────────────────────────────────────
+        try:
+            if _is_clf:
+                fig, ax = plt.subplots(figsize=(6, 5))
+                cm   = confusion_matrix(y_true_enc, y_pred_enc)
+                disp = ConfusionMatrixDisplay(cm, display_labels=classes)
+                disp.plot(ax=ax, colorbar=False)
+                ax.set_title(f'{name}  Acc={acc:.3f}')
+                fig.tight_layout()
+                fig.savefig(os.path.join(out_dir, "images", f"{name}.png"), dpi=150)
+                plt.close(fig)
+            else:
+                fig, ax = plt.subplots(figsize=(6, 6))
+                ax.scatter(y_true, y_pred, alpha=0.5, s=20)
+                lim = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
+                ax.plot(lim, lim, 'k--', lw=1)
+                ax.set_xlabel('Actual'); ax.set_ylabel('Predicted')
+                ax.set_title(f'{name}  R²={r2:.3f}')
+                fig.tight_layout()
+                fig.savefig(os.path.join(out_dir, "images", f"{name}.png"), dpi=150)
+                plt.close(fig)
+        except BaseException as e:
+            print(f"  [WARN] {name} 绘图失败（不影响训练）: {e}")
+            plt.close('all')   # 避免残留 figure 占用内存
 
-            # —— 生成完整模型信息卡（model_card.txt）——
+        # ── Step 5: Model Card（失败不阻断）──────────────────────────────────
+        try:
             _write_model_card(
-                pipe=pipe,
-                name=name,
-                metrics={"MAE": mae, "MSE": mse, "R2": r2},
-                seed=seed,
-                config=config,
-                flags=flags,
-                npy_paths=ml_npy,
-                dim_cfg=DIM_REDUCTION_CFG,
-                hpo_best=hpo_results.get(name, {}),
-                train_shape=X_train.shape,
-                test_shape=X_test.shape,
+                pipe=pipe, name=name, metrics=metrics, seed=seed,
+                config=config, flags=flags, npy_paths=ml_npy,
+                dim_cfg=DIM_REDUCTION_CFG, hpo_best=hpo_results.get(name, {}),
+                train_shape=X_train.shape, test_shape=X_test.shape,
                 train_time_s=_train_time,
                 out_path=os.path.join(out_dir, "models", f"{name}_model_card.txt")
             )
+        except BaseException as e:
+            print(f"  [WARN] {name} model_card 生成失败（不影响训练）: {e}")
 
-            # —— 回归散点图 ——
-            fig, ax = plt.subplots(figsize=(6, 6))
-            ax.scatter(y_true, y_pred, alpha=0.5, s=20)
-            lim = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
-            ax.plot(lim, lim, 'k--', lw=1)
-            ax.set_xlabel('Actual');  ax.set_ylabel('Predicted')
-            ax.set_title(f'{name}  R²={r2:.3f}')
-            fig.tight_layout()
-            fig.savefig(os.path.join(out_dir, "images", f"{name}.png"), dpi=150)
-            plt.close(fig)
-
-            # —— SHAP ——
-            _run_shap(pipe, name, X_test, seed, os.path.join(out_dir, "shap"))
-
-        except Exception as e:
-            print(f"  [ERROR] {name} 失败: {e}")
-            traceback.print_exc()
+        # ── Step 6: SHAP（失败不阻断）────────────────────────────────────────
+        try:
+            _shap_set = SHAP_TREE_MODELS_CLF if _is_clf else SHAP_TREE_MODELS
+            _run_shap(pipe, name, X_test, seed,
+                      os.path.join(out_dir, "shap"), shap_tree_models=_shap_set)
+        except BaseException as e:
+            print(f"  [WARN] {name} SHAP 失败（不影响训练）: {e}")
 
     # —— 写结果文件 ——
     with open(os.path.join(out_dir, "results", "results.txt"), 'w', encoding='utf-8') as f:
-        f.write(f"# Seed={seed}\n")
-        for name, mae, mse, r2 in results:
-            f.write(f"{name}: MAE={mae:.4f}, MSE={mse:.4f}, R²={r2:.4f}\n")
+        f.write(f"# Seed={seed}  task_type={TASK_TYPE}\n")
+        if _is_clf:
+            for name, acc, f1, auc in results:
+                f.write(f"{name}: Acc={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}\n")
+        else:
+            for name, mae, mse, r2 in results:
+                f.write(f"{name}: MAE={mae:.4f}, MSE={mse:.4f}, R²={r2:.4f}\n")
 
     if HPO_ENABLE and hpo_results:
         with open(os.path.join(out_dir, "results", "hpo_best_params.txt"), 'w', encoding='utf-8') as f:

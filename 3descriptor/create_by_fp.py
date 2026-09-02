@@ -543,10 +543,15 @@ if __name__ == '__main__':
                 errs.append(f"Mordred: {e}")
 
         # 10) 基础分子属性
+        # Bug fix: 原先用 d.update(props) 将属性存为独立 key（MolWt/MolLogP 等），
+        # 而 feature_utils._extract_one 的 if_prop 分支优先读取 d['prop_descriptor'] 向量。
+        # 现在：同时存储向量字段 prop_descriptor，兼容新旧两种读取方式。
         if CONFIG['calc_prop']:
             try:
                 props = calculate_props(mol)
-                d.update(props)
+                d.update(props)   # 保留独立字段（向后兼容）
+                _pf = CONFIG.get('prop_fields', [])
+                d['prop_descriptor'] = [props.get(k, float('nan')) for k in _pf]
             except Exception as e:
                 errs.append(f"Props: {e}")
 

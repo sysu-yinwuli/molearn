@@ -242,6 +242,11 @@ DIM_REDUCTION_CFG = {
 SPLIT_METHOD  = 'random'      # 'random' | 'stratified'
 SPLIT_N_BINS  = 5             # stratified 时的分层分箱数
 
+# ---------- 训练超时配置 ----------
+# 每个模型允许的最长训练+评估时间（秒）。超时后跳过该模型，不影响后续。
+# 设为 0 或负数表示不限时。SVR/MLP/KNeighbors 在高维大数据集上可能很慢，建议设置。
+TRAIN_TIMEOUT = 300           # 单模型最大训练时间（秒），默认 300s = 5 min
+
 # =============================================================================
 # ============================= 以下代码勿动 ==================================
 # =============================================================================
@@ -251,6 +256,8 @@ import sys
 import copy
 import datetime
 import traceback
+import signal
+import multiprocessing as _mp
 
 import numpy as np
 import pandas as pd
@@ -828,6 +835,84 @@ def _run_hpo(pipe, name, X_tr, y_tr, seed):
 
     raise ValueError(f"HPO_METHOD='{HPO_METHOD}' 无效，应为 'grid'/'random'/'optuna'")
 
+# ── 带超时的模型训练 ─────────────────────────────────────────────────────────────
+#
+# 实现策略（优先级从高到低）：
+#   1. Linux/macOS：signal.SIGALRM —— 同进程、零序列化开销、最可靠
+#   2. 其他平台（Windows）：multiprocessing fork/spawn —— 跨进程，有序列化开销
+#   3. timeout_s <= 0：不限时，直接训练
+
+class _TrainTimeout(Exception):
+    """内部超时信号异常，仅在 SIGALRM handler 中抛出。"""
+    pass
+
+
+def _fit_with_timeout(pipe, X_tr, y_tr, name, timeout_s):
+    """
+    训练模型，超过 timeout_s 秒则中止。
+    返回 (fitted_pipe, error_msg)：
+      - 成功：(fitted_pipe, None)
+      - 超时：(None, 'TIMEOUT')
+      - 训练异常：(None, error_repr_str)
+    timeout_s <= 0 表示不限时。
+    """
+    # ── 情况 A：不限时 ──────────────────────────────────────────────────────
+    if timeout_s <= 0:
+        try:
+            pipe.fit(X_tr, y_tr)
+            return pipe, None
+        except BaseException as exc:
+            return None, repr(exc)
+
+    # ── 情况 B：Linux/macOS → SIGALRM（同进程，无序列化开销）──────────────
+    if hasattr(signal, 'SIGALRM'):
+        def _handler(signum, frame):
+            raise _TrainTimeout()
+
+        old_handler = signal.signal(signal.SIGALRM, _handler)
+        signal.alarm(int(timeout_s))
+        try:
+            pipe.fit(X_tr, y_tr)
+            signal.alarm(0)                          # 取消闹钟
+            signal.signal(signal.SIGALRM, old_handler)
+            return pipe, None
+        except _TrainTimeout:
+            signal.signal(signal.SIGALRM, old_handler)
+            return None, 'TIMEOUT'
+        except BaseException as exc:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+            return None, repr(exc)
+
+    # ── 情况 C：Windows → multiprocessing（fork 不可用，用 spawn）─────────
+    # 注意：spawn 需要序列化 pipe/X_tr/y_tr，大数据集时较慢
+    def _worker(q, _pipe, _X, _y):
+        try:
+            _pipe.fit(_X, _y)
+            q.put(('ok', _pipe))
+        except BaseException as exc:
+            q.put(('err', repr(exc)))
+
+    ctx = _mp.get_context('spawn')
+    q   = ctx.Queue()
+    p   = ctx.Process(target=_worker, args=(q, pipe, X_tr, y_tr))
+    p.start()
+    p.join(timeout=timeout_s)
+
+    if p.is_alive():
+        p.terminate()
+        p.join(timeout=5)
+        if p.is_alive():
+            p.kill()
+            p.join()
+        return None, 'TIMEOUT'
+
+    if not q.empty():
+        status, payload = q.get_nowait()
+        return (payload, None) if status == 'ok' else (None, payload)
+    return None, f'worker exited with code {p.exitcode}'
+
+
 # ── SHAP 分析 ──────────────────────────────────────────────────────────────────
 def _run_shap(pipe, name, X_bg, seed, shap_dir, shap_tree_models=None):
     """对树模型做 SHAP 分析并保存图片，失败时打印警告不中断主流程。"""
@@ -947,66 +1032,104 @@ for seed in seeds:
     models      = _build_models()
 
     for name, pipe in models.items():
+        print(f"\n  ── {name} ──────────────────────────────────────────────")
+        _t0 = datetime.datetime.now()
+
+        # ── Step 1: 训练（带超时保护）────────────────────────────────────────
         try:
-            # —— HPO 或直接训练 ——
-            _t0 = datetime.datetime.now()
             if HPO_ENABLE:
+                # HPO 内部已有完整错误处理，不套超时（HPO 本身耗时预期长）
                 pipe, best = _run_hpo(pipe, name, X_train, y_train_fit, seed)
                 if best:
                     hpo_results[name] = best
                 if not best:
-                    pipe.fit(X_train, y_train_fit)
+                    # HPO 未给出最优参数时回落到直接训练，套超时
+                    pipe, _fit_err = _fit_with_timeout(pipe, X_train, y_train_fit,
+                                                       name, TRAIN_TIMEOUT)
+                    if pipe is None:
+                        if _fit_err == 'TIMEOUT':
+                            print(f"  [SKIP] {name} 训练超时（>{TRAIN_TIMEOUT}s），跳过")
+                        else:
+                            print(f"  [SKIP] {name} 训练失败（{_fit_err}），跳过")
+                        continue
             else:
-                pipe.fit(X_train, y_train_fit)
-            _train_time = (datetime.datetime.now() - _t0).total_seconds()
+                pipe, _fit_err = _fit_with_timeout(pipe, X_train, y_train_fit,
+                                                   name, TRAIN_TIMEOUT)
+                if pipe is None:
+                    if _fit_err == 'TIMEOUT':
+                        print(f"  [SKIP] {name} 训练超时（>{TRAIN_TIMEOUT}s），跳过")
+                    else:
+                        print(f"  [SKIP] {name} 训练失败（{_fit_err}），跳过")
+                    continue
 
+        except BaseException as e:
+            print(f"  [SKIP] {name} 训练阶段崩溃: {e}")
+            traceback.print_exc()
+            continue   # 单模型失败，继续下一个
+
+        _train_time = (datetime.datetime.now() - _t0).total_seconds()
+
+        # ── Step 2: 评估 ───────────────────────────────────────────────────────
+        metrics = {}
+        try:
             if _is_clf:
-                # —— 分类评估 ————————————————————————————————————————————
+                # —— 分类评估 ——
                 y_pred_enc = pipe.predict(X_test)
                 y_true_enc = y_test_enc
-                acc  = accuracy_score(y_true_enc, y_pred_enc)
-                f1   = f1_score(y_true_enc, y_pred_enc, average='weighted', zero_division=0)
-                # AUC（需要概率，不支持则跳过）
+                acc = accuracy_score(y_true_enc, y_pred_enc)
+                f1  = f1_score(y_true_enc, y_pred_enc, average='weighted', zero_division=0)
+                # AUC（需要 predict_proba，不支持时跳过）
                 try:
                     if len(classes) == 2:
                         proba = pipe.predict_proba(X_test)[:, 1]
-                        auc  = roc_auc_score(y_true_enc, proba)
+                        auc   = roc_auc_score(y_true_enc, proba)
                     else:
                         proba = pipe.predict_proba(X_test)
-                        auc  = roc_auc_score(y_true_enc, proba, multi_class='ovr', average='weighted')
+                        auc   = roc_auc_score(y_true_enc, proba,
+                                              multi_class='ovr', average='weighted')
                 except Exception:
                     auc = float('nan')
                 metrics = {"Accuracy": acc, "F1_weighted": f1, "AUC": auc}
                 results.append((name, acc, f1, auc))
-                print(f"  {name:28s}  Acc={acc:.4f}  F1={f1:.4f}  AUC={auc:.4f}")
-
-                # 混淆矩阵图
-                try:
-                    fig, ax = plt.subplots(figsize=(6, 5))
-                    cm = confusion_matrix(y_true_enc, y_pred_enc)
-                    disp = ConfusionMatrixDisplay(cm, display_labels=classes)
-                    disp.plot(ax=ax, colorbar=False)
-                    ax.set_title(f'{name}  Acc={acc:.3f}')
-                    fig.tight_layout()
-                    fig.savefig(os.path.join(out_dir, "images", f"{name}.png"), dpi=150)
-                    plt.close(fig)
-                except Exception as _pe:
-                    print(f"  [WARN] {name} 混淆矩阵图失败: {_pe}")
-
+                print(f"  {name:28s}  Acc={acc:.4f}  F1={f1:.4f}  AUC={auc:.4f}"
+                      f"  ({_train_time:.1f}s)")
             else:
-                # —— 回归评估（在原始标签空间）—————————————————————————————
+                # —— 回归评估（在原始标签空间）——
                 y_pred = y_scaler.inverse_transform(
                     pipe.predict(X_test).reshape(-1, 1)
                 ).flatten()
                 y_true = y_test.values
-                mae  = mean_absolute_error(y_true, y_pred)
-                mse  = mean_squared_error(y_true, y_pred)
-                r2   = r2_score(y_true, y_pred)
+                mae = mean_absolute_error(y_true, y_pred)
+                mse = mean_squared_error(y_true, y_pred)
+                r2  = r2_score(y_true, y_pred)
                 metrics = {"MAE": mae, "MSE": mse, "R2": r2}
                 results.append((name, mae, mse, r2))
-                print(f"  {name:28s}  MAE={mae:.4f}  MSE={mse:.4f}  R²={r2:.4f}")
+                print(f"  {name:28s}  MAE={mae:.4f}  MSE={mse:.4f}  R²={r2:.4f}"
+                      f"  ({_train_time:.1f}s)")
+        except BaseException as e:
+            print(f"  [WARN] {name} 评估失败，跳过该模型后续步骤: {e}")
+            traceback.print_exc()
+            continue   # 评估失败则不保存该模型
 
-                # 回归散点图
+        # ── Step 3: 保存模型文件 ──────────────────────────────────────────────
+        try:
+            model_path = os.path.join(out_dir, "models", f"{name}.joblib")
+            joblib.dump(pipe, model_path)
+        except BaseException as e:
+            print(f"  [WARN] {name} 模型文件保存失败: {e}")
+
+        # ── Step 4: 绘图（失败不阻断）─────────────────────────────────────────
+        try:
+            if _is_clf:
+                fig, ax = plt.subplots(figsize=(6, 5))
+                cm   = confusion_matrix(y_true_enc, y_pred_enc)
+                disp = ConfusionMatrixDisplay(cm, display_labels=classes)
+                disp.plot(ax=ax, colorbar=False)
+                ax.set_title(f'{name}  Acc={acc:.3f}')
+                fig.tight_layout()
+                fig.savefig(os.path.join(out_dir, "images", f"{name}.png"), dpi=150)
+                plt.close(fig)
+            else:
                 fig, ax = plt.subplots(figsize=(6, 6))
                 ax.scatter(y_true, y_pred, alpha=0.5, s=20)
                 lim = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
@@ -1016,12 +1139,12 @@ for seed in seeds:
                 fig.tight_layout()
                 fig.savefig(os.path.join(out_dir, "images", f"{name}.png"), dpi=150)
                 plt.close(fig)
+        except BaseException as e:
+            print(f"  [WARN] {name} 绘图失败（不影响训练）: {e}")
+            plt.close('all')   # 避免残留 figure 占用内存
 
-            # —— 保存模型 ——
-            model_path = os.path.join(out_dir, "models", f"{name}.joblib")
-            joblib.dump(pipe, model_path)
-
-            # —— 生成完整模型信息卡（model_card.txt）——
+        # ── Step 5: Model Card（失败不阻断）──────────────────────────────────
+        try:
             _write_model_card(
                 pipe=pipe, name=name, metrics=metrics, seed=seed,
                 config=config, flags=flags, npy_paths=ml_npy,
@@ -1030,15 +1153,16 @@ for seed in seeds:
                 train_time_s=_train_time,
                 out_path=os.path.join(out_dir, "models", f"{name}_model_card.txt")
             )
+        except BaseException as e:
+            print(f"  [WARN] {name} model_card 生成失败（不影响训练）: {e}")
 
-            # —— SHAP（仅树模型）——
+        # ── Step 6: SHAP（失败不阻断）────────────────────────────────────────
+        try:
             _shap_set = SHAP_TREE_MODELS_CLF if _is_clf else SHAP_TREE_MODELS
             _run_shap(pipe, name, X_test, seed,
                       os.path.join(out_dir, "shap"), shap_tree_models=_shap_set)
-
-        except Exception as e:
-            print(f"  [ERROR] {name} 失败: {e}")
-            traceback.print_exc()
+        except BaseException as e:
+            print(f"  [WARN] {name} SHAP 失败（不影响训练）: {e}")
 
     # —— 写结果文件 ——
     with open(os.path.join(out_dir, "results", "results.txt"), 'w', encoding='utf-8') as f:

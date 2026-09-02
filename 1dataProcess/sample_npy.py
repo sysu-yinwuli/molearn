@@ -67,15 +67,58 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # =============================================================================
 # ── MOLEARN_ 环境变量覆盖（由 molearn_run.py 自动设置，单独运行时忽略）─────────
-# MOLEARN_INPUT_NPY  : 覆盖 INPUT_NPY
-# MOLEARN_OUTPUT_DIR : 覆盖 OUTPUT_DIR
+# MOLEARN_INPUT_NPY       : 覆盖 INPUT_NPY
+# MOLEARN_OUTPUT_DIR      : 覆盖 OUTPUT_DIR
+# MOLEARN_SAMPLE_SIZE     : 覆盖 SAMPLE_SIZE
+# MOLEARN_SAMPLE_SEEDS    : 覆盖 SEEDS（逗号分隔，如 "42,123,456"）
+# MOLEARN_RUN_RANDOM      : 覆盖 METHOD_RANDOM       (true/false)
+# MOLEARN_RUN_SYSTEMATIC  : 覆盖 METHOD_SYSTEMATIC   (true/false)
+# MOLEARN_RUN_STRATIFIED  : 覆盖 METHOD_STRATIFIED   (true/false)
+# MOLEARN_RUN_LHS         : 覆盖 METHOD_LHS          (true/false)
+# MOLEARN_RUN_DIVERSITY   : 覆盖 METHOD_DIVERSITY    (true/false)
+# MOLEARN_STRATIFIED_BINS : 覆盖 STRATIFIED_N_BINS
+# MOLEARN_LHS_FEATURE     : 覆盖 LHS_FEAT_FIELD
+# MOLEARN_LHS_PCA_DIMS    : 覆盖 LHS_N_COMPONENTS
+# MOLEARN_DIV_FP_FIELD    : 覆盖 DIVERSITY_FP_TYPE
 # =============================================================================
-_env_input  = os.environ.get('MOLEARN_INPUT_NPY', '').strip()
-_env_outdir = os.environ.get('MOLEARN_OUTPUT_DIR', '').strip()
-if _env_input:
-    INPUT_NPY  = _env_input
-if _env_outdir:
-    OUTPUT_DIR = _env_outdir
+_env_input   = os.environ.get('MOLEARN_INPUT_NPY',      '').strip()
+_env_outdir  = os.environ.get('MOLEARN_OUTPUT_DIR',     '').strip()
+_env_size    = os.environ.get('MOLEARN_SAMPLE_SIZE',    '').strip()
+_env_seeds   = os.environ.get('MOLEARN_SAMPLE_SEEDS',   '').strip()
+_env_random  = os.environ.get('MOLEARN_RUN_RANDOM',     '').strip().lower()
+_env_syst    = os.environ.get('MOLEARN_RUN_SYSTEMATIC', '').strip().lower()
+_env_strat   = os.environ.get('MOLEARN_RUN_STRATIFIED', '').strip().lower()
+_env_lhs     = os.environ.get('MOLEARN_RUN_LHS',        '').strip().lower()
+_env_div     = os.environ.get('MOLEARN_RUN_DIVERSITY',  '').strip().lower()
+_env_bins    = os.environ.get('MOLEARN_STRATIFIED_BINS','').strip()
+_env_lhsfeat = os.environ.get('MOLEARN_LHS_FEATURE',    '').strip()
+_env_lhsdim  = os.environ.get('MOLEARN_LHS_PCA_DIMS',   '').strip()
+_env_divfp   = os.environ.get('MOLEARN_DIV_FP_FIELD',   '').strip()
+
+if _env_input:  INPUT_NPY  = _env_input
+if _env_outdir: OUTPUT_DIR = _env_outdir
+if _env_size:
+    try:
+        _v = float(_env_size)
+        SAMPLE_SIZE = int(_v) if _v >= 1 else _v   # ≥1 为绝对数，<1 为比例
+    except ValueError:
+        pass
+if _env_seeds:
+    try:
+        SEEDS = [int(s.strip()) for s in _env_seeds.split(',')]
+    except ValueError:
+        pass
+_bool_map = {'true': True, '1': True, 'yes': True,
+             'false': False, '0': False, 'no': False}
+if _env_random  in _bool_map: METHOD_RANDOM     = _bool_map[_env_random]
+if _env_syst    in _bool_map: METHOD_SYSTEMATIC = _bool_map[_env_syst]
+if _env_strat   in _bool_map: METHOD_STRATIFIED = _bool_map[_env_strat]
+if _env_lhs     in _bool_map: METHOD_LHS        = _bool_map[_env_lhs]
+if _env_div     in _bool_map: METHOD_DIVERSITY  = _bool_map[_env_div]
+if _env_bins.isdigit():        STRATIFIED_N_BINS = int(_env_bins)
+if _env_lhsfeat: LHS_FEAT_FIELD   = _env_lhsfeat
+if _env_lhsdim.isdigit(): LHS_N_COMPONENTS = int(_env_lhsdim)
+if _env_divfp:  DIVERSITY_FP_TYPE = _env_divfp
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 

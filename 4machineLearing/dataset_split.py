@@ -75,15 +75,42 @@ from feature_utils import load_npy, load_config, resolve_path
 
 # =============================================================================
 # ── MOLEARN_ 环境变量覆盖（由 molearn_run.py 自动设置，单独运行时忽略）─────────
-# MOLEARN_INPUT_NPY  : 覆盖 INPUT_NPY
-# MOLEARN_OUTPUT_DIR : 覆盖 OUTPUT_DIR
+# MOLEARN_INPUT_NPY      : 覆盖 INPUT_NPY
+# MOLEARN_OUTPUT_DIR     : 覆盖 OUTPUT_DIR
+# MOLEARN_SPLIT_METHOD   : 覆盖 SPLIT_METHOD  (random|stratified|scaffold)
+# MOLEARN_SPLIT_SEED     : 覆盖 SPLIT_SEED
+# MOLEARN_TRAIN_RATIO    : 覆盖 TRAIN_RATIO
+# MOLEARN_VALID_RATIO    : 覆盖 VALID_RATIO
+# MOLEARN_TEST_RATIO     : 覆盖 TEST_RATIO
+# MOLEARN_STRATIFIED_BINS: 覆盖 STRATIFIED_N_BINS
+# MOLEARN_SCAFFOLD_TYPE  : 覆盖 SCAFFOLD_TYPE
 # =============================================================================
-_env_input  = os.environ.get('MOLEARN_INPUT_NPY', '').strip()
-_env_outdir = os.environ.get('MOLEARN_OUTPUT_DIR', '').strip()
-if _env_input:
-    INPUT_NPY  = _env_input
-if _env_outdir:
-    OUTPUT_DIR = _env_outdir
+_env_input   = os.environ.get('MOLEARN_INPUT_NPY',       '').strip()
+_env_outdir  = os.environ.get('MOLEARN_OUTPUT_DIR',      '').strip()
+_env_method  = os.environ.get('MOLEARN_SPLIT_METHOD',    '').strip()
+_env_seed    = os.environ.get('MOLEARN_SPLIT_SEED',      '').strip()
+_env_train   = os.environ.get('MOLEARN_TRAIN_RATIO',     '').strip()
+_env_valid   = os.environ.get('MOLEARN_VALID_RATIO',     '').strip()
+_env_test    = os.environ.get('MOLEARN_TEST_RATIO',      '').strip()
+_env_bins    = os.environ.get('MOLEARN_STRATIFIED_BINS', '').strip()
+_env_scaffold= os.environ.get('MOLEARN_SCAFFOLD_TYPE',   '').strip()
+
+if _env_input:   INPUT_NPY       = _env_input
+if _env_outdir:  OUTPUT_DIR      = _env_outdir
+if _env_method in ('random', 'stratified', 'scaffold'):
+    SPLIT_METHOD = _env_method
+if _env_seed.isdigit():   SPLIT_SEED      = int(_env_seed)
+if _env_train:
+    try: TRAIN_RATIO = float(_env_train)
+    except ValueError: pass
+if _env_valid:
+    try: VALID_RATIO = float(_env_valid)
+    except ValueError: pass
+if _env_test:
+    try: TEST_RATIO  = float(_env_test)
+    except ValueError: pass
+if _env_bins.isdigit():   STRATIFIED_N_BINS = int(_env_bins)
+if _env_scaffold: SCAFFOLD_TYPE = _env_scaffold
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 

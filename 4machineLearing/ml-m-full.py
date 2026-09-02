@@ -4,13 +4,17 @@
 # ============================= 配置区域（只改这里）============================
 # =============================================================================
 
+import os as _os  # 仅供 CONFIG 区域使用，正式导入在下方
+
 # ---------- 任务类型 ----------
 # 'regression'    : 回归任务（标签为连续数值，如能量、溶解度）
 # 'classification': 分类任务（标签为整数类别，如 0/1/2/3 等）
-TASK_TYPE    = 'regression'
+# 优先从 MOLEARN_CONFIG 写入的 config.txt 中读取（由 molearn_run.py 注入）
+TASK_TYPE    = 'regression'   # 仅作默认值，实际由 config['task_type'] 覆盖
 
 # ---------- 数据配置 ----------
-CONFIG_TXT   = 'config-full-1.txt'   # 特征开关配置文件（npy_path、if_rdkit 等）
+# 优先读取 MOLEARN_CONFIG 环境变量（由 molearn_run.py 注入），回退到本地文件
+CONFIG_TXT   = _os.environ.get('MOLEARN_CONFIG', '').strip() or 'config-full-1.txt'
 
 # ---------- 启用/禁用模型 ----------
 # 回归模式（TASK_TYPE='regression'）使用 MODEL_ENABLE_REG
@@ -303,6 +307,26 @@ config = load_config(_config_path)
 print("当前配置:")
 for k, v in config.items():
     print(f"  {k}: {v}")
+
+# ── 从 config 读取 TASK_TYPE（覆盖顶部默认值）────────────────────────────────
+# molearn_run.py 生成的 config-full-*.txt 中包含 task_type 字段
+_cfg_task = config.get('task_type', '').strip()
+if _cfg_task in ('regression', 'classification'):
+    TASK_TYPE = _cfg_task
+    print(f"[INFO] TASK_TYPE 从 config 读取: {TASK_TYPE}")
+else:
+    print(f"[INFO] TASK_TYPE 使用默认值: {TASK_TYPE}")
+
+# 写入 config 供 model_card 使用
+config['_task_type'] = TASK_TYPE
+
+# ── 从 config 读取 SPLIT 配置（覆盖顶部默认值）─────────────────────────────
+_cfg_split = config.get('split_method', '').strip()
+if _cfg_split in ('random', 'stratified'):
+    SPLIT_METHOD = _cfg_split
+_cfg_bins = config.get('split_n_bins', '')
+if str(_cfg_bins).isdigit():
+    SPLIT_N_BINS = int(_cfg_bins)
 
 # ── 加载数据 ──────────────────────────────────────────────────────────────────
 ml_npy = [p.strip() for p in config['npy_path'].split(',')]
@@ -846,9 +870,22 @@ for seed in seeds:
         )
         print(f"  [划分] 全随机划分")
 
-    # 标签标准化（仅对训练集 fit，防止数据泄漏）
-    y_scaler = StandardScaler()
-    y_train_s = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).flatten()
+    _is_clf = (TASK_TYPE == 'classification')
+
+    # ── 标签处理 ──────────────────────────────────────────────────────────────
+    if _is_clf:
+        # 分类：整数标签，不做 StandardScaler
+        le = LabelEncoder()
+        y_train_enc = le.fit_transform(y_train.values.astype(int))
+        y_test_enc  = le.transform(y_test.values.astype(int))
+        y_train_fit = y_train_enc   # 传入 fit
+        y_scaler    = None
+        classes     = le.classes_
+    else:
+        # 回归：StandardScaler 标准化标签（防止梯度爆炸，训练集 fit）
+        y_scaler  = StandardScaler()
+        y_train_fit = y_scaler.fit_transform(y_train.values.reshape(-1, 1)).flatten()
+        classes   = None
 
     # ── 降维（可选）────────────────────────────────────────────────────────────
     dim_reducer = None
@@ -856,23 +893,24 @@ for seed in seeds:
         print(f"  [降维] 开始降维: method={DIM_REDUCTION_CFG['method']}")
         dim_reducer, X_train_np = fit_dim_reduction(X_train.values, DIM_REDUCTION_CFG)
         X_test_np  = dim_reducer.transform(X_test.values)
-        # 重新包装为 DataFrame（列名为 dr_0, dr_1, ...）
-        dr_cols   = [f"dr_{i}" for i in range(X_train_np.shape[1])]
-        X_train   = pd.DataFrame(X_train_np, columns=dr_cols, index=X_train.index)
-        X_test    = pd.DataFrame(X_test_np,  columns=dr_cols, index=X_test.index)
+        dr_cols    = [f"dr_{i}" for i in range(X_train_np.shape[1])]
+        X_train    = pd.DataFrame(X_train_np, columns=dr_cols, index=X_train.index)
+        X_test     = pd.DataFrame(X_test_np,  columns=dr_cols, index=X_test.index)
     else:
         print(f"  [降维] 跳过（method=none）")
 
-    # 输出目录
+    # ── 输出目录 ─────────────────────────────────────────────────────────────
     out_dir = os.path.join(output_base, f"seed_{seed}")
     for sub in ("models", "images", "results", "shap"):
         os.makedirs(os.path.join(out_dir, sub), exist_ok=True)
 
-    # 保存推理所需资源
+    # ── 保存推理所需资源 ──────────────────────────────────────────────────────
     joblib.dump(X_train.columns.tolist(), os.path.join(out_dir, 'training_columns.pkl'))
-    joblib.dump(y_scaler,                 os.path.join(out_dir, 'y_scaler.pkl'))
-
-    # 保存降维器（如果启用）
+    joblib.dump(TASK_TYPE,                os.path.join(out_dir, 'task_type.pkl'))
+    if _is_clf:
+        joblib.dump(classes, os.path.join(out_dir, 'classes.pkl'))
+    else:
+        joblib.dump(y_scaler, os.path.join(out_dir, 'y_scaler.pkl'))
     if dim_reducer is not None:
         dim_reducer.save(os.path.join(out_dir, 'dim_reducer.pkl'))
 
@@ -885,26 +923,71 @@ for seed in seeds:
             # —— HPO 或直接训练 ——
             _t0 = datetime.datetime.now()
             if HPO_ENABLE:
-                pipe, best = _run_hpo(pipe, name, X_train, y_train_s, seed)
+                pipe, best = _run_hpo(pipe, name, X_train, y_train_fit, seed)
                 if best:
                     hpo_results[name] = best
                 if not best:
-                    pipe.fit(X_train, y_train_s)
+                    pipe.fit(X_train, y_train_fit)
             else:
-                pipe.fit(X_train, y_train_s)
+                pipe.fit(X_train, y_train_fit)
             _train_time = (datetime.datetime.now() - _t0).total_seconds()
 
-            # —— 评估（在原始标签空间）——
-            y_pred = y_scaler.inverse_transform(
-                pipe.predict(X_test).reshape(-1, 1)
-            ).flatten()
-            y_true = y_test.values
+            if _is_clf:
+                # —— 分类评估 ————————————————————————————————————————————
+                y_pred_enc = pipe.predict(X_test)
+                y_true_enc = y_test_enc
+                acc  = accuracy_score(y_true_enc, y_pred_enc)
+                f1   = f1_score(y_true_enc, y_pred_enc, average='weighted', zero_division=0)
+                # AUC（需要概率，不支持则跳过）
+                try:
+                    if len(classes) == 2:
+                        proba = pipe.predict_proba(X_test)[:, 1]
+                        auc  = roc_auc_score(y_true_enc, proba)
+                    else:
+                        proba = pipe.predict_proba(X_test)
+                        auc  = roc_auc_score(y_true_enc, proba, multi_class='ovr', average='weighted')
+                except Exception:
+                    auc = float('nan')
+                metrics = {"Accuracy": acc, "F1_weighted": f1, "AUC": auc}
+                results.append((name, acc, f1, auc))
+                print(f"  {name:28s}  Acc={acc:.4f}  F1={f1:.4f}  AUC={auc:.4f}")
 
-            mae = mean_absolute_error(y_true, y_pred)
-            mse = mean_squared_error(y_true, y_pred)
-            r2  = r2_score(y_true, y_pred)
-            results.append((name, mae, mse, r2))
-            print(f"  {name:22s}  MAE={mae:.4f}  MSE={mse:.4f}  R²={r2:.4f}")
+                # 混淆矩阵图
+                try:
+                    fig, ax = plt.subplots(figsize=(6, 5))
+                    cm = confusion_matrix(y_true_enc, y_pred_enc)
+                    disp = ConfusionMatrixDisplay(cm, display_labels=classes)
+                    disp.plot(ax=ax, colorbar=False)
+                    ax.set_title(f'{name}  Acc={acc:.3f}')
+                    fig.tight_layout()
+                    fig.savefig(os.path.join(out_dir, "images", f"{name}.png"), dpi=150)
+                    plt.close(fig)
+                except Exception as _pe:
+                    print(f"  [WARN] {name} 混淆矩阵图失败: {_pe}")
+
+            else:
+                # —— 回归评估（在原始标签空间）—————————————————————————————
+                y_pred = y_scaler.inverse_transform(
+                    pipe.predict(X_test).reshape(-1, 1)
+                ).flatten()
+                y_true = y_test.values
+                mae  = mean_absolute_error(y_true, y_pred)
+                mse  = mean_squared_error(y_true, y_pred)
+                r2   = r2_score(y_true, y_pred)
+                metrics = {"MAE": mae, "MSE": mse, "R2": r2}
+                results.append((name, mae, mse, r2))
+                print(f"  {name:28s}  MAE={mae:.4f}  MSE={mse:.4f}  R²={r2:.4f}")
+
+                # 回归散点图
+                fig, ax = plt.subplots(figsize=(6, 6))
+                ax.scatter(y_true, y_pred, alpha=0.5, s=20)
+                lim = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
+                ax.plot(lim, lim, 'k--', lw=1)
+                ax.set_xlabel('Actual'); ax.set_ylabel('Predicted')
+                ax.set_title(f'{name}  R²={r2:.3f}')
+                fig.tight_layout()
+                fig.savefig(os.path.join(out_dir, "images", f"{name}.png"), dpi=150)
+                plt.close(fig)
 
             # —— 保存模型 ——
             model_path = os.path.join(out_dir, "models", f"{name}.joblib")
@@ -912,42 +995,24 @@ for seed in seeds:
 
             # —— 导出模型参数报告（轻量版）——
             _dump_model_params(
-                pipe, name,
-                metrics={"MAE": mae, "MSE": mse, "R2": r2},
-                seed=seed,
+                pipe, name, metrics=metrics, seed=seed,
                 out_path=os.path.join(out_dir, "models", f"{name}_params.txt")
             )
 
             # —— 生成完整模型信息卡（model_card.txt）——
             _write_model_card(
-                pipe=pipe,
-                name=name,
-                metrics={"MAE": mae, "MSE": mse, "R2": r2},
-                seed=seed,
-                config=config,
-                flags=flags,
-                npy_paths=ml_npy,
-                dim_cfg=DIM_REDUCTION_CFG,
-                hpo_best=hpo_results.get(name, {}),
-                train_shape=X_train.shape,
-                test_shape=X_test.shape,
+                pipe=pipe, name=name, metrics=metrics, seed=seed,
+                config=config, flags=flags, npy_paths=ml_npy,
+                dim_cfg=DIM_REDUCTION_CFG, hpo_best=hpo_results.get(name, {}),
+                train_shape=X_train.shape, test_shape=X_test.shape,
                 train_time_s=_train_time,
                 out_path=os.path.join(out_dir, "models", f"{name}_model_card.txt")
             )
 
-            # —— 回归散点图 ——
-            fig, ax = plt.subplots(figsize=(6, 6))
-            ax.scatter(y_true, y_pred, alpha=0.5, s=20)
-            lim = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
-            ax.plot(lim, lim, 'k--', lw=1)
-            ax.set_xlabel('Actual');  ax.set_ylabel('Predicted')
-            ax.set_title(f'{name}  R²={r2:.3f}')
-            fig.tight_layout()
-            fig.savefig(os.path.join(out_dir, "images", f"{name}.png"), dpi=150)
-            plt.close(fig)
-
-            # —— SHAP ——
-            _run_shap(pipe, name, X_test, seed, os.path.join(out_dir, "shap"))
+            # —— SHAP（仅树模型）——
+            _shap_set = SHAP_TREE_MODELS_CLF if _is_clf else SHAP_TREE_MODELS
+            _run_shap(pipe, name, X_test, seed,
+                      os.path.join(out_dir, "shap"), shap_tree_models=_shap_set)
 
         except Exception as e:
             print(f"  [ERROR] {name} 失败: {e}")
@@ -955,9 +1020,13 @@ for seed in seeds:
 
     # —— 写结果文件 ——
     with open(os.path.join(out_dir, "results", "results.txt"), 'w', encoding='utf-8') as f:
-        f.write(f"# Seed={seed}\n")
-        for name, mae, mse, r2 in results:
-            f.write(f"{name}: MAE={mae:.4f}, MSE={mse:.4f}, R²={r2:.4f}\n")
+        f.write(f"# Seed={seed}  task_type={TASK_TYPE}\n")
+        if _is_clf:
+            for name, acc, f1, auc in results:
+                f.write(f"{name}: Acc={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}\n")
+        else:
+            for name, mae, mse, r2 in results:
+                f.write(f"{name}: MAE={mae:.4f}, MSE={mse:.4f}, R²={r2:.4f}\n")
 
     if HPO_ENABLE and hpo_results:
         with open(os.path.join(out_dir, "results", "hpo_best_params.txt"), 'w', encoding='utf-8') as f:

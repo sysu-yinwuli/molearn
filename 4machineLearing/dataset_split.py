@@ -69,9 +69,10 @@ import pandas as pd
 warnings.filterwarnings('ignore')
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.environ.get('MOLEARN_ROOT', '') or os.path.dirname(_HERE)
 sys.path.insert(0, _HERE)
 
-from feature_utils import load_npy, load_config, resolve_path
+from feature_utils import load_npy, load_config, resolve_path, npy_save as _npy_save_fu
 
 # =============================================================================
 # ── MOLEARN_ 环境变量覆盖（由 molearn_run.py 自动设置，单独运行时忽略）─────────
@@ -95,6 +96,10 @@ _env_test    = os.environ.get('MOLEARN_TEST_RATIO',      '').strip()
 _env_bins    = os.environ.get('MOLEARN_STRATIFIED_BINS', '').strip()
 _env_scaffold= os.environ.get('MOLEARN_SCAFFOLD_TYPE',   '').strip()
 
+# OUTPUT_DIR 默认值：优先使用 MOLEARN_ROOT 下的 data/splits，回退到脚本目录相对路径
+if not os.path.isabs(OUTPUT_DIR):
+    OUTPUT_DIR = os.path.join(_ROOT, 'data', 'splits')
+
 if _env_input:   INPUT_NPY       = _env_input
 if _env_outdir:  OUTPUT_DIR      = _env_outdir
 if _env_method in ('random', 'stratified', 'scaffold'):
@@ -112,9 +117,6 @@ if _env_test:
 if _env_bins.isdigit():   STRATIFIED_N_BINS = int(_env_bins)
 if _env_scaffold: SCAFFOLD_TYPE = _env_scaffold
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
 
 def _check_ratios():
@@ -124,10 +126,10 @@ def _check_ratios():
 
 def _save_split(mol_list, fname, split_label):
     path = os.path.join(OUTPUT_DIR, fname)
-    d = {
-        'successful': mol_list,
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    extra_meta = {
         'failed_count': 0,
-        'error_stats': {},
+        'error_stats':  {},
         'split_info': {
             'method': SPLIT_METHOD,
             'split':  split_label,
@@ -135,7 +137,7 @@ def _save_split(mol_list, fname, split_label):
             'source': INPUT_NPY,
         }
     }
-    np.save(path, d, allow_pickle=True)
+    _npy_save_fu(path, mol_list, extra_meta=extra_meta)
     print(f"  ✓ {split_label:6s}: {len(mol_list):5d} 分子 → {path}")
     return path
 

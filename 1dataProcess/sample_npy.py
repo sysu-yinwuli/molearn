@@ -95,6 +95,10 @@ _env_lhsfeat = os.environ.get('MOLEARN_LHS_FEATURE',    '').strip()
 _env_lhsdim  = os.environ.get('MOLEARN_LHS_PCA_DIMS',   '').strip()
 _env_divfp   = os.environ.get('MOLEARN_DIV_FP_FIELD',   '').strip()
 
+# OUTPUT_DIR 默认值：优先使用 MOLEARN_ROOT 下的 data/samples，回退到脚本目录相对路径
+if not os.path.isabs(OUTPUT_DIR):
+    OUTPUT_DIR = os.path.join(_ROOT, 'data', 'samples')
+
 if _env_input:  INPUT_NPY  = _env_input
 if _env_outdir: OUTPUT_DIR = _env_outdir
 if _env_size:
@@ -120,12 +124,12 @@ if _env_lhsfeat: LHS_FEAT_FIELD   = _env_lhsfeat
 if _env_lhsdim.isdigit(): LHS_N_COMPONENTS = int(_env_lhsdim)
 if _env_divfp:  DIVERSITY_FP_TYPE = _env_divfp
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
 
 def _load_npy(path):
+    """npy 加载：优先使用 feature_utils.npy_load，备用内建实现。"""
+    if _HAS_FEATURE_UTILS:
+        return _npy_load(path)
     raw = np.load(path, allow_pickle=True)
     if raw.ndim == 0:
         raw = raw.item()
@@ -137,19 +141,22 @@ def _load_npy(path):
 def _save_npy(mol_list, method, n_target, seed, suffix=''):
     fname = f"{OUTPUT_PREFIX}_{method}_n{len(mol_list)}_seed{seed}{suffix}.npy"
     path  = os.path.join(OUTPUT_DIR, fname)
-    save_dict = {
-        'successful':    mol_list,
-        'failed_count':  0,
-        'error_stats':   {},
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    extra_meta = {
+        'failed_count': 0,
+        'error_stats':  {},
         'sample_info': {
-            'method':      method,
-            'source':      INPUT_NPY,
-            'seed':        seed,
-            'n_target':    n_target,
-            'n_actual':    len(mol_list),
+            'method':   method,
+            'source':   INPUT_NPY,
+            'seed':     seed,
+            'n_target': n_target,
+            'n_actual': len(mol_list),
         }
     }
-    np.save(path, save_dict, allow_pickle=True)
+    if _HAS_FEATURE_UTILS:
+        _npy_save_fu(path, mol_list, extra_meta=extra_meta)
+    else:
+        np.save(path, {'successful': mol_list, **extra_meta}, allow_pickle=True)
     print(f"    ✓ 已保存: {path}  ({len(mol_list)} 分子)")
     return path
 

@@ -13,7 +13,8 @@ import os as _os  # 仅供 CONFIG 区域使用，正式导入在下方
 TASK_TYPE    = 'regression'   # 仅作默认值，实际由 config['task_type'] 覆盖
 
 # ---------- 数据配置 ----------
-# 优先读取 MOLEARN_CONFIG 环境变量（由 molearn_run.py 注入），回退到本地文件
+# 优先读取 MOLEARN_INPUT_NPY / MOLEARN_FEAT_* 等环境变量（由 molearn_run.py 注入）；
+# 单独运行时若无环境变量，则回退到 CONFIG_TXT 本地文件
 CONFIG_TXT   = _os.environ.get('MOLEARN_CONFIG', '').strip() or 'config-full-1.txt'
 
 # ---------- 启用/禁用模型 ----------
@@ -54,8 +55,7 @@ MODEL_ENABLE_CLF = {
     "GaussianNB":             True,
 }
 
-# 向后兼容别名（由运行时自动选择，此处仅做占位，勿手动修改）
-MODEL_ENABLE = MODEL_ENABLE_REG
+# （MODEL_ENABLE_REG / MODEL_ENABLE_CLF 由运行时通过 _build_models() 自动选择）
 
 # ---------- 回归模型超参数 ----------
 # key 格式：Pipeline 步骤名 "model__参数名"，直接传给 pipe.set_params()
@@ -122,8 +122,7 @@ MODEL_PARAMS_CLF = {
     "GaussianNB":              {},
 }
 
-# 向后兼容别名
-MODEL_PARAMS = MODEL_PARAMS_REG
+# （MODEL_PARAMS_REG / MODEL_PARAMS_CLF 由运行时通过 _build_models() 自动选择）
 
 # ---------- 超参数优化（HPO）配置 ----------
 HPO_ENABLE   = False        # 总开关
@@ -300,39 +299,100 @@ from feature_utils import (load_npy, extract_features, build_header,
                             clean_features, load_config, parse_flags, resolve_path,
                             fit_dim_reduction, DimReducer)
 
-# ── 路径解析 ──────────────────────────────────────────────────────────────────
-_config_path = resolve_path(CONFIG_TXT, _HERE)
-config = load_config(_config_path)
+# ── 参数初始化：优先读取 MOLEARN_* 环境变量，回退到 config.txt 文件 ───────────
+#
+# 注入方式说明：
+#   molearn_run.py 调用时通过 MOLEARN_* 直接注入所有参数（无需中间文件）；
+#   单独运行脚本时若无 MOLEARN_* 则按 CONFIG_TXT 路径读取旧格式 config 文件（向后兼容）。
+#
+_env_npy        = os.environ.get('MOLEARN_INPUT_NPY',      '').strip()
+_env_out        = os.environ.get('MOLEARN_OUTPUT_DIR',     '').strip()
+_env_seeds_str  = os.environ.get('MOLEARN_SEEDS',          '').strip()
+_env_task       = os.environ.get('MOLEARN_TASK_TYPE',      '').strip()
+_env_split      = os.environ.get('MOLEARN_SPLIT_METHOD',   '').strip()
+_env_bins       = os.environ.get('MOLEARN_SPLIT_N_BINS',   '').strip()
 
-print("当前配置:")
-for k, v in config.items():
-    print(f"  {k}: {v}")
+# 14 特征开关环境变量
+_FEAT_KEYS = ['if_rdkit','if_maccs','if_morgan','if_atompair','if_torsion',
+              'if_avalon','if_soap','if_acsf','if_mbtr','if_mordred',
+              'if_prop','if_QC','if_extra','if_m']
+_env_feat = {k: os.environ.get(f'MOLEARN_FEAT_{k.upper()}', '').strip()
+             for k in _FEAT_KEYS}
 
-# ── 从 config 读取 TASK_TYPE（覆盖顶部默认值）────────────────────────────────
-# molearn_run.py 生成的 config-full-*.txt 中包含 task_type 字段
-_cfg_task = config.get('task_type', '').strip()
-if _cfg_task in ('regression', 'classification'):
-    TASK_TYPE = _cfg_task
-    print(f"[INFO] TASK_TYPE 从 config 读取: {TASK_TYPE}")
+_use_env = bool(_env_npy)   # 有 MOLEARN_INPUT_NPY 时认为由 molearn_run.py 调用
+
+if _use_env:
+    # ── 路径：直接使用注入的 npy 路径 ─────────────────────────────────────────
+    ml_npy   = [p.strip() for p in _env_npy.split(',')]
+    _config_path = ''   # 无需 config 文件
+
+    # ── 任务类型 ───────────────────────────────────────────────────────────────
+    if _env_task in ('regression', 'classification'):
+        TASK_TYPE = _env_task
+    print(f"[INFO] TASK_TYPE={TASK_TYPE}  来源=MOLEARN_TASK_TYPE")
+
+    # ── 划分配置 ───────────────────────────────────────────────────────────────
+    if _env_split in ('random', 'stratified'):
+        SPLIT_METHOD = _env_split
+    if _env_bins.isdigit():
+        SPLIT_N_BINS = int(_env_bins)
+
+    # ── seeds（覆盖顶部默认） ──────────────────────────────────────────────────
+    if _env_seeds_str:
+        try:
+            _env_seeds_parsed = [int(s.strip()) for s in _env_seeds_str.split(',')]
+        except ValueError:
+            _env_seeds_parsed = None
+    else:
+        _env_seeds_parsed = None
+
+    # ── 构造 flags config（供 parse_flags 使用） ───────────────────────────────
+    config = {k: (int(_env_feat[k]) if _env_feat[k].isdigit() else 0)
+              for k in _FEAT_KEYS}
+
+    # ── 输出目录 ───────────────────────────────────────────────────────────────
+    _output_base_env = _env_out if _env_out else os.path.join(_HERE, 'results')
+
+    print("[INFO] 参数来源: MOLEARN_* 环境变量")
+    for k in _FEAT_KEYS:
+        print(f"  {k}: {config[k]}")
+
 else:
-    print(f"[INFO] TASK_TYPE 使用默认值: {TASK_TYPE}")
+    # ── 向后兼容：从 config.txt 读取（单独运行时使用）──────────────────────────
+    _config_path = resolve_path(CONFIG_TXT, _HERE)
+    config = load_config(_config_path)
+    print(f"[INFO] 参数来源: {_config_path}")
+    print("当前配置:")
+    for k, v in config.items():
+        print(f"  {k}: {v}")
 
-# 写入 config 供 model_card 使用
-config['_task_type'] = TASK_TYPE
+    # 从 config 读取 TASK_TYPE
+    _cfg_task = config.get('task_type', '').strip()
+    if _cfg_task in ('regression', 'classification'):
+        TASK_TYPE = _cfg_task
+    print(f"[INFO] TASK_TYPE={TASK_TYPE}")
 
-# ── 从 config 读取 SPLIT 配置（覆盖顶部默认值）─────────────────────────────
-_cfg_split = config.get('split_method', '').strip()
-if _cfg_split in ('random', 'stratified'):
-    SPLIT_METHOD = _cfg_split
-_cfg_bins = config.get('split_n_bins', '')
-if str(_cfg_bins).isdigit():
-    SPLIT_N_BINS = int(_cfg_bins)
+    # 从 config 读取 SPLIT 配置
+    _cfg_split = config.get('split_method', '').strip()
+    if _cfg_split in ('random', 'stratified'):
+        SPLIT_METHOD = _cfg_split
+    _cfg_bins = config.get('split_n_bins', '')
+    if str(_cfg_bins).isdigit():
+        SPLIT_N_BINS = int(_cfg_bins)
+
+    ml_npy = [p.strip() for p in config['npy_path'].split(',')]
+    _env_seeds_parsed = None
+    _output_base_env  = config.get('res_folder', 'results')
+
+# ── 公共信息写入 config，供 model_card 使用 ────────────────────────────────────
+config['_task_type']    = TASK_TYPE
+config['_config_file']  = _config_path
+config['_split_method'] = SPLIT_METHOD
+config['_hpo_method']   = HPO_METHOD if HPO_ENABLE else 'disabled'
 
 # ── 加载数据 ──────────────────────────────────────────────────────────────────
-ml_npy = [p.strip() for p in config['npy_path'].split(',')]
 n_files = len(ml_npy)
-
-datas = [load_npy(resolve_path(p, _HERE)) for p in ml_npy]
+datas   = [load_npy(resolve_path(p, _HERE)) for p in ml_npy]
 
 sample_counts = [len(d) for d in datas]
 if len(set(sample_counts)) != 1:
@@ -396,8 +456,7 @@ _ALL_BASE_MODELS_CLF = {
     "GaussianNB":              Pipeline([('scaler', StandardScaler()), ('model', GaussianNB())]),
 }
 
-# 向后兼容别名
-_ALL_BASE_MODELS = _ALL_BASE_MODELS_REG
+# （_ALL_BASE_MODELS_REG / _ALL_BASE_MODELS_CLF 由运行时通过 _build_models() 自动选择）
 
 # ── 分类模型中支持 SHAP TreeExplainer 的模型集合 ─────────────────────────────
 SHAP_TREE_MODELS_CLF = {"DecisionTreeClassifier", "RandomForestClassifier",
@@ -703,46 +762,13 @@ def _write_model_card(pipe, name, metrics, seed, config, flags,
         f.write('\n'.join(lines) + '\n')
 
 
-def _dump_model_params(pipe, name, metrics: dict, seed: int, out_path: str):
-    """
-    轻量版参数报告（保留向后兼容）。
-    完整信息卡由 _write_model_card() 生成。
-    """
-    model_step = pipe.named_steps['model']
-    params = model_step.get_params()
-    scaler_info = ""
-    if 'scaler' in pipe.named_steps:
-        scaler = pipe.named_steps['scaler']
-        scaler_info = f"\n[Scaler]\ntype: {type(scaler).__name__}\n"
-
-    lines = [
-        f"# Model Parameter Report",
-        f"# Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        f"# Seed: {seed}",
-        f"",
-        f"[Model]",
-        f"name: {name}",
-        f"class: {type(model_step).__name__}",
-        f"module: {type(model_step).__module__}",
-    ]
-    if scaler_info:
-        lines.append(scaler_info.strip())
-
-    lines += ["", "[Hyperparameters]"]
-    for k, v in sorted(params.items()):
-        lines.append(f"{k}: {v}")
-
-    lines += ["", "[Metrics on Test Set]"]
-    for metric, val in metrics.items():
-        lines.append(f"{metric}: {val:.6f}")
-
-    with open(out_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(lines) + '\n')
 
 # ── 超参数优化 ────────────────────────────────────────────────────────────────
 def _run_hpo(pipe, name, X_tr, y_tr, seed):
     """返回 (最优已fit Pipeline, 最优参数 dict)。"""
-    target = set(HPO_MODELS) if HPO_MODELS else set(_ALL_BASE_MODELS)
+    _is_clf_hpo = (TASK_TYPE == 'classification')
+    _all_models = _ALL_BASE_MODELS_CLF if _is_clf_hpo else _ALL_BASE_MODELS_REG
+    target = set(HPO_MODELS) if HPO_MODELS else set(_all_models)
     if name not in target:
         return pipe, {}
     if HPO_METHOD in ('grid', 'random') and name not in HPO_PARAM_GRIDS:
@@ -776,8 +802,7 @@ def _run_hpo(pipe, name, X_tr, y_tr, seed):
             print("  [HPO] optuna 未安装（pip install optuna），跳过")
             return pipe, {}
 
-        _probe = _optuna_spaces.__code__.co_consts
-        if name not in str(_probe):
+        if not _optuna_spaces(None, name):
             print(f"  [HPO] {name} 无 Optuna 空间定义，跳过")
             return pipe, {}
 
@@ -843,13 +868,16 @@ def _run_shap(pipe, name, X_bg, seed, shap_dir, shap_tree_models=None):
         print(f"  [WARN] {name} SHAP 失败（不影响训练）: {e}")
 
 # ── 主训练循环 ────────────────────────────────────────────────────────────────
-seeds       = [int(s.strip()) for s in config.get('seed', '42').split(',')]
-output_base = config.get('res_folder', 'results')
-
-# 将训练上下文注入 config，供 model card 使用
-config['_config_file'] = _config_path
-config['_split_method'] = SPLIT_METHOD
-config['_hpo_method']   = HPO_METHOD if HPO_ENABLE else 'disabled'
+# seeds：优先 MOLEARN_SEEDS（由 molearn_run.py 注入），次为 config 文件中的 seed 字段，最后默认 [42]
+if _env_seeds_parsed:
+    seeds = _env_seeds_parsed
+else:
+    _seed_raw = config.get('seed', '42')
+    try:
+        seeds = [int(s.strip()) for s in str(_seed_raw).split(',')]
+    except ValueError:
+        seeds = [42]
+output_base = _output_base_env
 
 for seed in seeds:
     print(f"\n{'='*60}\n  Seed = {seed}\n{'='*60}")
@@ -992,12 +1020,6 @@ for seed in seeds:
             # —— 保存模型 ——
             model_path = os.path.join(out_dir, "models", f"{name}.joblib")
             joblib.dump(pipe, model_path)
-
-            # —— 导出模型参数报告（轻量版）——
-            _dump_model_params(
-                pipe, name, metrics=metrics, seed=seed,
-                out_path=os.path.join(out_dir, "models", f"{name}_params.txt")
-            )
 
             # —— 生成完整模型信息卡（model_card.txt）——
             _write_model_card(

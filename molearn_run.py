@@ -219,6 +219,7 @@ def _run_script(script_rel: str, extra_env: dict = None,
         return 0
 
     env = os.environ.copy()
+    env['MOLEARN_ROOT'] = _ROOT          # 所有子脚本均可读取项目根目录
     if extra_env:
         env.update({k: str(v) for k, v in extra_env.items()})
 
